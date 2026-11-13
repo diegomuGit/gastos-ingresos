@@ -1,0 +1,11 @@
+.venv/
+tests/_tmp/
+__pycache__/
+*.pyc
+.pytest_cache/
+secrets/
+data/
+*.pem
+.env
+entrada/*
+!entrada/LEEME.md

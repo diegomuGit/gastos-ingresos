@@ -1,0 +1,207 @@
+/* ============================================================
+   BBVA — Design tokens
+   Manual de Marca 2026. Valores oficiales salvo los marcados
+   como (derivado), que se obtienen por interpolación entre
+   tokens oficiales y no figuran en el manual.
+   ============================================================ */
+
+/* Sustitutos sancionados por el manual para entornos sin las
+   fuentes de marca: Source Serif (títulos) + Lato (texto).
+   Si sirves las fuentes reales desde Brand Experience con
+   @font-face, el stack las tomará primero automáticamente. */
+@import url('https://fonts.googleapis.com/css2?family=Lato:ital,wght@0,300;0,400;0,700;1,400&family=Source+Serif+4:ital,opsz,wght@0,8..60,600;0,8..60,700;1,8..60,700&display=swap');
+
+:root {
+  /* ---------- Principales ---------- */
+  --bbva-sand:            #F7F8F8;
+  --bbva-serene:          #85C8FF;
+  --bbva-electric:        #001391;
+  --bbva-midnight:        #070E46;
+
+  /* ---------- Escala de grises (0-7) ---------- */
+  --bbva-grey-0:          #FFFFFF;  /* solo digital o soporte de impresión */
+  --bbva-grey-1:          #F7F8F8;  /* = Sand */
+  --bbva-grey-2:          #E2E6EA;
+  --bbva-grey-3:          #CAD1D8;
+  --bbva-grey-4:          #ADB8C2;  /* nunca como texto: 1.90:1 sobre Sand */
+  --bbva-grey-5:          #46536D;  /* gris válido para texto secundario */
+  --bbva-grey-6:          #070E46;  /* = Midnight */
+  --bbva-grey-7:          #000519;  /* solo texto digital alto contraste */
+  /* #000000 no es un color permitido */
+
+  /* ---------- Acentos (máx. 2% de superficie) ---------- */
+  --bbva-canary:          #FFE761;
+  --bbva-mandarin:        #FFB56B;
+  --bbva-lime:            #88E783;
+  --bbva-purple:          #9694FF;
+  --bbva-aqua:            #8BE1E9;
+
+  /* ---------- Paleta digital ---------- */
+  --bbva-serene-dark:     #53A9EF;
+
+  /* ---------- Semánticos (solo digital) ---------- */
+  --bbva-green:           #9CE67E;
+  --bbva-green-dark:      #024700;
+  --bbva-green-light:     #EBFFF0;
+  --bbva-ocre:            #FFC553;
+  --bbva-ocre-dark:       #B98409;
+  --bbva-ocre-light:      #FFF5E5;
+  --bbva-red:             #FF5252;
+  --bbva-red-medium:      #FF8585;
+  --bbva-red-dark:        #C30A0A;
+  --bbva-red-light:       #FFE9E5;
+  --bbva-sem-aqua:        #118C97;
+  --bbva-sem-aqua-light:  #E0FCFF;
+  --bbva-royal:           #2B7BF4;
+  --bbva-royal-dark:      #2165CA;
+  --bbva-blue-light:      #E2E6EA;
+
+  /* ---------- Roles semánticos de interfaz ---------- */
+  --bbva-bg:              var(--bbva-sand);
+  --bbva-surface:         var(--bbva-grey-0);
+  --bbva-border:          var(--bbva-grey-2);
+  --bbva-border-strong:   var(--bbva-grey-3);
+  --bbva-text:            var(--bbva-midnight);
+  --bbva-text-secondary:  var(--bbva-grey-5);
+  --bbva-action:          var(--bbva-electric);
+  --bbva-action-text:     var(--bbva-sand);
+  --bbva-positive:        var(--bbva-green-dark);
+  --bbva-negative:        var(--bbva-red-dark);
+
+  /* ---------- Tipografía ---------- */
+  --bbva-font-display:    "BBVA Tiempos Headline", "Tiempos Headline", "Source Serif 4", "Source Serif Pro", Georgia, serif;
+  --bbva-font-text:       "BBVA Benton Sans", "Benton Sans", "Lato", "Helvetica Neue", Arial, sans-serif;
+
+  --bbva-weight-book:     400;   /* Benton Sans Book  -> Lato Regular  */
+  --bbva-weight-medium:   700;   /* Benton Sans Medium -> Lato Bold    */
+  --bbva-weight-display:  700;   /* Tiempos Headline Bold              */
+
+  /* Escala (extensión práctica, no norma del manual) */
+  --bbva-size-page-title: 44px;
+  --bbva-size-section:    26px;
+  --bbva-size-kpi:        48px;
+  --bbva-size-card-title: 16px;
+  --bbva-size-body:       15px;
+  --bbva-size-data:       14px;
+  --bbva-size-label:      13px;
+  --bbva-size-caption:    12px;
+
+  /* Interlineados del manual */
+  --bbva-lh-display:      1.0;   /* titular gran formato: 90-100% */
+  --bbva-lh-heading:      1.1;   /* titular: 100-110%             */
+  --bbva-lh-lead:         1.2;   /* entradilla: 120%              */
+  --bbva-lh-body:         1.55;  /* párrafo: 150-200%             */
+
+  /* ---------- Espaciado: rejilla de 8px, X = 12px ---------- */
+  --bbva-x:               12px;  /* margen base X          */
+  --bbva-gap:             24px;  /* separación = 2X        */
+  --bbva-page-margin:     24px;
+  --bbva-space-1:         8px;
+  --bbva-space-2:         16px;
+  --bbva-space-3:         24px;
+  --bbva-space-4:         32px;
+  --bbva-space-5:         40px;
+
+  /* ---------- Radios: múltiplos de 4 ---------- */
+  --bbva-radius-sm:       8px;
+  --bbva-radius-md:       16px;
+  --bbva-radius-lg:       24px;
+  --bbva-radius-pill:     999px;
+
+  /* ---------- Series de gráficas ---------- */
+  --bbva-chart-1:         #001391;  /* Electric      */
+  --bbva-chart-2:         #85C8FF;  /* Serene        */
+  --bbva-chart-3:         #9694FF;  /* Purple        */
+  --bbva-chart-4:         #8BE1E9;  /* Aqua          */
+  --bbva-chart-5:         #FFB56B;  /* Mandarin      */
+  --bbva-chart-6:         #88E783;  /* Lime          */
+  --bbva-chart-7:         #53A9EF;  /* Serene Dark   */
+  --bbva-chart-8:         #46536D;  /* Gris 5        */
+  /* Canary #FFE761 solo para rellenos y barras, nunca líneas finas */
+
+  --bbva-chart-grid:      #E2E6EA;
+  --bbva-chart-axis:      #46536D;
+  --bbva-chart-reference: #46536D;
+
+  /* Escala secuencial claro -> oscuro */
+  --bbva-seq-1:           #E2E6EA;
+  --bbva-seq-2:           #C3DFFC;  /* (derivado) */
+  --bbva-seq-3:           #85C8FF;
+  --bbva-seq-4:           #53A9EF;
+  --bbva-seq-5:           #3B7CC7;  /* (derivado) */
+  --bbva-seq-6:           #001391;
+  --bbva-seq-7:           #070E46;
+
+  /* Escala divergente negativo -> positivo */
+  --bbva-div-neg-2:       #C30A0A;
+  --bbva-div-neg-1:       #FF8585;
+  --bbva-div-mid:         #E2E6EA;
+  --bbva-div-pos-1:       #88E783;
+  --bbva-div-pos-2:       #024700;
+}
+
+/* ============================================================
+   Modo oscuro — combinación D del manual (fondo Midnight).
+   Electric Blue deja de servir como color de acción sobre
+   Midnight por contraste insuficiente; Serene ocupa su lugar.
+   ============================================================ */
+[data-theme="dark"] {
+  --bbva-bg:              #070E46;
+  --bbva-surface:         #0C1454;  /* (derivado) */
+  --bbva-border:          #46536D;
+  --bbva-border-strong:   #46536D;
+  --bbva-text:            #F7F8F8;
+  --bbva-text-secondary:  #CAD1D8;
+  --bbva-action:          #85C8FF;
+  --bbva-action-text:     #070E46;
+  --bbva-positive:        #88E783;
+  --bbva-negative:        #FF8585;
+  --bbva-chart-grid:      #46536D;
+  --bbva-chart-axis:      #ADB8C2;
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+body {
+  background: var(--bbva-bg);
+  color: var(--bbva-text);
+  font-family: var(--bbva-font-text);
+  font-weight: var(--bbva-weight-book);
+  font-size: var(--bbva-size-body);
+  line-height: var(--bbva-lh-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1 {
+  font-family: var(--bbva-font-display);
+  font-weight: var(--bbva-weight-display);
+  font-size: var(--bbva-size-page-title);
+  line-height: var(--bbva-lh-display);
+  letter-spacing: -0.01em;
+  margin: 0;
+}
+
+/* Del h2 hacia abajo se usa la sans: la serif está restringida
+   a titulares de gran formato. */
+h2, h3, h4 {
+  font-family: var(--bbva-font-text);
+  font-weight: var(--bbva-weight-medium);
+  line-height: var(--bbva-lh-heading);
+  margin: 0;
+}
+h2 { font-size: var(--bbva-size-section); }
+h3 { font-size: var(--bbva-size-card-title); }
+
+a {
+  color: var(--bbva-action);
+  text-decoration: none;
+}
+a:hover { text-decoration: underline; }
+
+/* Cifras: siempre en la sans, nunca en la serif, y tabulares
+   para que las columnas alineen. */
+.bbva-num {
+  font-family: var(--bbva-font-text);
+  font-variant-numeric: tabular-nums;
+}

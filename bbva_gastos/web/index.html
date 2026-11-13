@@ -1,0 +1,792 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gastos</title>
+<link rel="stylesheet" href="/bbva-tokens.css">
+<link rel="stylesheet" href="/app.css">
+</head>
+<body>
+<header>
+  <div class="brand">
+    <div class="logo">BBVA</div>
+    <div>
+      <h1>Gastos</h1>
+      <p class="subtitle" id="rango">Cargando la base…</p>
+    </div>
+  </div>
+  <div class="controls">
+    <label for="mes">Periodo</label>
+    <select id="mes" class="select"></select>
+  </div>
+</header>
+
+<p class="error" id="aviso" hidden></p>
+
+<section class="grid kpis" id="kpis" aria-live="polite"></section>
+
+<section class="grid split">
+  <article class="card">
+    <div class="card-head">
+      <h2>Evolución</h2>
+      <div class="vista" role="group" aria-label="Tipo de gráfica">
+        <button type="button" id="vista-barras" class="chip" aria-pressed="true">Barras</button>
+        <button type="button" id="vista-lineas" class="chip" aria-pressed="false">Líneas</button>
+      </div>
+    </div>
+    <div class="legend" id="series" role="group" aria-label="Series">
+      <button type="button" class="chip" data-serie="ingresos" aria-pressed="true"><i class="swatch ing"></i>Ingresos</button>
+      <button type="button" class="chip" data-serie="consumo" aria-pressed="true"><i class="swatch con"></i>Consumo</button>
+      <button type="button" class="chip" data-serie="ahorro" aria-pressed="false"><i class="swatch aho"></i>Ahorro</button>
+    </div>
+    <p class="hint">Pulsa un mes para ver solo ese periodo. El punto marca un mes incompleto.</p>
+    <div class="chart-wrap">
+      <div class="chart" id="evolucion" style="height:280px"></div>
+      <div class="tip" id="tip" hidden></div>
+    </div>
+  </article>
+  <article class="card">
+    <h2>Categorías de consumo</h2>
+    <p class="hint">Pulsa una categoría para filtrar la tabla.</p>
+    <div class="hcats" id="categorias" style="height:320px"></div>
+  </article>
+</section>
+
+<section class="grid">
+  <article class="card">
+    <div class="card-head">
+      <h2>Lectura</h2>
+      <button type="button" class="btn" id="generar" data-nuevo="0">Generar lectura</button>
+    </div>
+    <p class="modelo" id="modelo"></p>
+    <div id="lectura"></div>
+    <h3>Hechos</h3>
+    <ul class="insights" id="insights"></ul>
+  </article>
+</section>
+
+<section class="grid">
+  <article class="card">
+    <div class="card-head">
+      <h2>Movimientos</h2>
+      <p class="cuenta" id="cuenta"></p>
+    </div>
+    <div class="tools">
+      <label for="buscar">Buscar</label>
+      <input id="buscar" class="field" type="search" placeholder="Concepto o detalle">
+      <label for="direccion">Dirección</label>
+      <select id="direccion" class="select">
+        <option value="">Todas</option>
+        <option value="ingreso">Ingresos</option>
+        <option value="gasto">Gastos</option>
+      </select>
+      <label for="origen">Origen</label>
+      <select id="origen" class="select">
+        <option value="">Todos</option>
+        <option value="regla">Regla</option>
+        <option value="correccion">Corrección</option>
+        <option value="jev">Jev</option>
+        <option value="pendiente">Pendiente</option>
+      </select>
+      <label for="filtro-categoria">Categoría</label>
+      <select id="filtro-categoria" class="select"></select>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th data-col="fecha" aria-sort="descending"><button type="button" class="sort" data-sort="fecha">Fecha</button></th>
+            <th data-col="concepto" aria-sort="none"><button type="button" class="sort" data-sort="concepto">Concepto</button></th>
+            <th data-col="etiqueta" aria-sort="none"><button type="button" class="sort" data-sort="etiqueta">Categoría</button></th>
+            <th data-col="origen" aria-sort="none"><button type="button" class="sort" data-sort="origen">Origen</button></th>
+            <th data-col="importe" class="num" aria-sort="none"><button type="button" class="sort" data-sort="importe">Importe</button></th>
+          </tr>
+        </thead>
+        <tbody id="tabla"></tbody>
+      </table>
+    </div>
+  </article>
+</section>
+
+<footer id="pie">Las cifras salen de data/gastos.sqlite. Una corrección tuya gana a Jev. El ahorro y los Bizum a personas no entran en el consumo.</footer>
+
+<script>
+const mesesCortos = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
+const mesesLargos = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+const origenTexto = { regla: "Regla", correccion: "Corrección", jev: "Jev", pendiente: "Pendiente" };
+const formato = new Intl.NumberFormat("es-ES", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
+const formatoCorto = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 1, useGrouping: true });
+const SVGNS = "http://www.w3.org/2000/svg";
+const SERIES = [
+  { id: "ingresos", nombre: "Ingresos", color: "var(--bbva-chart-1)" },
+  { id: "consumo", nombre: "Consumo", color: "var(--bbva-chart-2)" },
+  { id: "ahorro", nombre: "Ahorro", color: "var(--bbva-chart-3)" }
+];
+
+const seriesOn = { ingresos: true, consumo: true, ahorro: false };
+let vista = "barras";
+let serieCache = [];
+let mesActivo = "";
+let categoriasCache = [];
+let movimientosCache = [];
+const tablaEstado = { orden: "fecha", dir: "desc", texto: "", direccion: "", origen: "", categoria: "" };
+let resizeTimer = 0;
+
+function euros(value, modo) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  const cuerpo = formato.format(Math.abs(n)) + " €";
+  if (modo === "salida") return (n === 0 ? "" : "−") + cuerpo;
+  if (n > 0) return "+" + cuerpo;
+  if (n < 0) return "−" + cuerpo;
+  return cuerpo;
+}
+
+function limpiar(nodo) {
+  while (nodo.firstChild) nodo.removeChild(nodo.firstChild);
+}
+
+async function pedir(ruta, metodo) {
+  const respuesta = await fetch(ruta, { method: metodo || "GET", cache: "no-store" });
+  const cuerpo = await respuesta.json();
+  if (!respuesta.ok) throw new Error(cuerpo.error || "No pude leer la base.");
+  return cuerpo;
+}
+
+function nombreMes(mes) {
+  const partes = mes.split("-");
+  return mesesLargos[Number(partes[1]) - 1] + " " + partes[0];
+}
+
+function opcion(select, valor, etiqueta) {
+  const nodo = document.createElement("option");
+  nodo.value = valor;
+  nodo.textContent = etiqueta;
+  select.appendChild(nodo);
+}
+
+function tarjeta(etiqueta, cifra, claseCifra, nota, extra) {
+  const articulo = document.createElement("article");
+  articulo.className = "card";
+  const p = document.createElement("p");
+  p.className = "kpi-label";
+  p.textContent = etiqueta;
+  const h = document.createElement("p");
+  h.className = "kpi-value num";
+  if (claseCifra) h.classList.add(claseCifra);
+  h.textContent = cifra;
+  articulo.append(p, h);
+  if (extra) articulo.append(extra);
+  if (nota) {
+    const n = document.createElement("p");
+    n.className = "kpi-note";
+    n.textContent = nota;
+    articulo.append(n);
+  }
+  return articulo;
+}
+
+function variacion(pct) {
+  if (pct === null || pct === undefined || pct === "") return null;
+  const n = Number(pct);
+  if (!Number.isFinite(n) || n === 0) return null;
+  const p = document.createElement("p");
+  p.className = "delta num " + (n > 0 ? "neg" : "pos");
+  p.textContent = (n > 0 ? "+" : "−") + formato.format(Math.abs(n)) + " % vs. mes anterior";
+  return p;
+}
+
+function pintarKpis(datos) {
+  const host = document.getElementById("kpis");
+  limpiar(host);
+  const notaConsumo = datos.sin_clasificar_n
+    ? datos.sin_clasificar_n + " sin clasificar, fuera de esta cifra"
+    : "Sin el ahorro ni los Bizum a personas";
+  const notaIngresos = datos.mes === "todos"
+    ? "Nómina, Bizum, transferencias y devoluciones"
+    : (datos.completo ? "Mes completo" : "Mes incompleto");
+  let notaMedia = "Suma de todos los movimientos";
+  if (datos.mes === "todos" && datos.consumo_medio_meses_completos) {
+    notaMedia = "Media de consumo en meses completos: " + euros(datos.consumo_medio_meses_completos, "salida");
+  }
+  const resultado = Number(datos.resultado);
+  host.append(
+    tarjeta("Ingresos", euros(datos.ingresos, "entrada"), "pos", notaIngresos),
+    tarjeta("Consumo", euros(datos.consumo, "salida"), null, notaConsumo, variacion(datos.variacion_consumo)),
+    tarjeta("Ahorro", euros(datos.ahorro, "salida"), null, "No entra en el consumo"),
+    tarjeta("Resultado", euros(datos.resultado), resultado < 0 ? "neg" : "pos", datos.mes === "todos" ? notaMedia : "Suma de todos los movimientos")
+  );
+}
+
+function svgEl(nombre) {
+  return document.createElementNS(SVGNS, nombre);
+}
+
+function ejeBonito(maximo) {
+  const valor = Number(maximo);
+  if (!Number.isFinite(valor) || valor <= 0) return 1;
+  const exp = Math.pow(10, Math.floor(Math.log10(valor)));
+  const fraccion = valor / exp;
+  const bonito = fraccion <= 1 ? 1 : fraccion <= 2 ? 2 : fraccion <= 5 ? 5 : 10;
+  return bonito * exp;
+}
+
+function textoEje(valor, tope) {
+  if (!valor) return "0";
+  if (tope >= 1000) return formatoCorto.format(valor / 1000) + " mil";
+  return formatoCorto.format(valor);
+}
+
+function yDe(valor, tope, arriba, alto) {
+  return arriba + alto - (Number(valor) / tope) * alto;
+}
+
+function pintarEvolucion(serie, mesSeleccionado) {
+  const host = document.getElementById("evolucion");
+  limpiar(host);
+  document.getElementById("tip").hidden = true;
+  if (!serie.length) {
+    const p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = "Sin movimientos en la base.";
+    host.append(p);
+    return;
+  }
+  const activas = SERIES.filter((item) => seriesOn[item.id]);
+  if (!activas.length) {
+    const p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = "Activa al menos una serie.";
+    host.append(p);
+    return;
+  }
+  const ancho = Math.max(host.clientWidth || 720, 320);
+  const altoSvg = 280;
+  const padL = 64;
+  const padR = 12;
+  const padT = 16;
+  const padB = 36;
+  const plotH = altoSvg - padT - padB;
+  const plotW = ancho - padL - padR;
+  const maximo = Math.max(1, ...serie.map((fila) => Math.max(...activas.map((item) => Number(fila[item.id]) || 0))));
+  const tope = ejeBonito(maximo * 1.05);
+  const svg = svgEl("svg");
+  svg.setAttribute("viewBox", "0 0 " + ancho + " " + altoSvg);
+  svg.setAttribute("width", String(ancho));
+  svg.setAttribute("height", String(altoSvg));
+  svg.setAttribute("role", "group");
+  svg.setAttribute("aria-label", "Evolución mensual");
+  const slot = plotW / serie.length;
+  for (const tick of [0, tope / 2, tope]) {
+    const y = yDe(tick, tope, padT, plotH);
+    const linea = svgEl("line");
+    linea.setAttribute("x1", String(padL));
+    linea.setAttribute("x2", String(ancho - padR));
+    linea.setAttribute("y1", String(y));
+    linea.setAttribute("y2", String(y));
+    linea.setAttribute("stroke", "var(--bbva-chart-grid)");
+    svg.append(linea);
+    const etiqueta = svgEl("text");
+    etiqueta.setAttribute("x", String(padL - 8));
+    etiqueta.setAttribute("y", String(y + 4));
+    etiqueta.setAttribute("text-anchor", "end");
+    etiqueta.textContent = textoEje(tick, tope);
+    svg.append(etiqueta);
+  }
+  serie.forEach((fila, indice) => {
+    const x0 = padL + slot * indice;
+    const centro = x0 + slot / 2;
+    if (mesSeleccionado && fila.mes === mesSeleccionado) {
+      const fondo = svgEl("rect");
+      fondo.setAttribute("x", String(x0));
+      fondo.setAttribute("y", "8");
+      fondo.setAttribute("width", String(slot));
+      fondo.setAttribute("height", String(altoSvg - 8));
+      fondo.setAttribute("fill", "var(--bbva-sand)");
+      svg.append(fondo);
+    }
+    if (vista === "barras") {
+      const n = activas.length;
+      const hueco = 4;
+      const anchoGrupo = Math.min(slot * 0.76, n * 18 + (n - 1) * hueco);
+      const anchoBarra = (anchoGrupo - (n - 1) * hueco) / n;
+      const inicio = centro - anchoGrupo / 2;
+      const base = yDe(0, tope, padT, plotH);
+      activas.forEach((item, i) => {
+        const valor = Number(fila[item.id]) || 0;
+        const y = yDe(valor, tope, padT, plotH);
+        const barra = svgEl("rect");
+        barra.setAttribute("x", String(inicio + i * (anchoBarra + hueco)));
+        barra.setAttribute("y", String(y));
+        barra.setAttribute("width", String(Math.max(anchoBarra, 2)));
+        barra.setAttribute("height", String(Math.max(base - y, 0)));
+        barra.setAttribute("rx", "4");
+        barra.setAttribute("fill", item.color);
+        svg.append(barra);
+      });
+    }
+    const hit = svgEl("rect");
+    hit.setAttribute("x", String(x0));
+    hit.setAttribute("y", "0");
+    hit.setAttribute("width", String(slot));
+    hit.setAttribute("height", String(altoSvg - 28));
+    hit.setAttribute("fill", "transparent");
+    hit.setAttribute("data-mes", fila.mes);
+    hit.setAttribute("tabindex", "0");
+    hit.setAttribute("role", "button");
+    const corto = mesesCortos[Number(fila.mes.slice(5)) - 1];
+    hit.setAttribute("aria-label", nombreMes(fila.mes) + (fila.completo ? "" : ", incompleto"));
+    svg.append(hit);
+    const etiqueta = svgEl("text");
+    etiqueta.setAttribute("x", String(centro));
+    etiqueta.setAttribute("y", String(altoSvg - 12));
+    etiqueta.setAttribute("text-anchor", "middle");
+    etiqueta.textContent = fila.completo ? corto : corto + " ·";
+    if (!fila.completo) etiqueta.setAttribute("class", "eje-incompleto");
+    else if (fila.mes === mesSeleccionado) etiqueta.setAttribute("class", "eje-activo");
+    svg.append(etiqueta);
+  });
+  if (vista === "lineas") {
+    for (const item of activas) {
+      const puntos = serie.map((fila, indice) => {
+        const x = padL + slot * indice + slot / 2;
+        const y = yDe(Number(fila[item.id]) || 0, tope, padT, plotH);
+        return x + "," + y;
+      });
+      const trazo = svgEl("polyline");
+      trazo.setAttribute("fill", "none");
+      trazo.setAttribute("stroke", item.color);
+      trazo.setAttribute("stroke-width", item.id === "ingresos" ? "2.5" : "2");
+      trazo.setAttribute("stroke-linejoin", "round");
+      trazo.setAttribute("stroke-linecap", "round");
+      trazo.setAttribute("points", puntos.join(" "));
+      svg.append(trazo);
+      const ultimo = puntos[puntos.length - 1].split(",");
+      const marca = svgEl("circle");
+      marca.setAttribute("cx", ultimo[0]);
+      marca.setAttribute("cy", ultimo[1]);
+      marca.setAttribute("r", "3.5");
+      marca.setAttribute("fill", item.color);
+      svg.append(marca);
+      if (mesSeleccionado) {
+        const elegido = serie.findIndex((fila) => fila.mes === mesSeleccionado);
+        if (elegido >= 0 && elegido !== serie.length - 1) {
+          const punto = puntos[elegido].split(",");
+          const hito = svgEl("circle");
+          hito.setAttribute("cx", punto[0]);
+          hito.setAttribute("cy", punto[1]);
+          hito.setAttribute("r", "3.5");
+          hito.setAttribute("fill", item.color);
+          svg.append(hito);
+        }
+      }
+    }
+    const hits = svg.querySelectorAll("[data-mes]");
+    hits.forEach((hit) => svg.append(hit));
+  }
+  host.append(svg);
+}
+
+function mostrarTip(evento, fila) {
+  const tip = document.getElementById("tip");
+  limpiar(tip);
+  const titulo = document.createElement("p");
+  titulo.className = "tip-titulo";
+  titulo.textContent = nombreMes(fila.mes) + (fila.completo ? "" : " · incompleto");
+  tip.append(titulo);
+  for (const item of SERIES) {
+    if (!seriesOn[item.id]) continue;
+    const linea = document.createElement("p");
+    const modo = item.id === "ingresos" ? "entrada" : "salida";
+    linea.textContent = item.nombre + " " + euros(fila[item.id], modo);
+    tip.append(linea);
+  }
+  tip.hidden = false;
+  const host = document.querySelector(".chart-wrap").getBoundingClientRect();
+  const origen = evento.currentTarget && evento.currentTarget.getBoundingClientRect
+    ? evento.currentTarget.getBoundingClientRect()
+    : null;
+  let x = origen ? origen.left + origen.width / 2 - host.left : evento.clientX - host.left;
+  let y = origen ? origen.top - host.top + 8 : evento.clientY - host.top;
+  tip.style.left = "0px";
+  tip.style.top = "0px";
+  const caja = tip.getBoundingClientRect();
+  if (x + caja.width > host.width) x = host.width - caja.width - 8;
+  if (y + caja.height > host.height) y = host.height - caja.height - 8;
+  tip.style.left = Math.max(8, x) + "px";
+  tip.style.top = Math.max(8, y) + "px";
+}
+
+function pintarCategorias(lista, activa) {
+  const host = document.getElementById("categorias");
+  limpiar(host);
+  if (!lista.length) {
+    const p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = "No hay consumo clasificado en este periodo.";
+    host.append(p);
+    return;
+  }
+  const max = Math.max(...lista.map((fila) => Math.abs(Number(fila.importe))), 1);
+  for (const fila of lista) {
+    const boton = document.createElement("button");
+    boton.type = "button";
+    boton.className = "hbar-btn";
+    boton.dataset.categoria = fila.categoria;
+    boton.setAttribute("aria-pressed", activa === fila.categoria ? "true" : "false");
+    const nombre = document.createElement("span");
+    nombre.className = "hbar-name";
+    nombre.textContent = fila.etiqueta;
+    const pista = document.createElement("span");
+    pista.className = "hbar-track";
+    const barra = document.createElement("span");
+    barra.className = "hbar";
+    barra.style.width = Math.round(Math.abs(Number(fila.importe)) / max * 100) + "%";
+    pista.append(barra);
+    const valor = document.createElement("span");
+    valor.className = "hbar-value num";
+    valor.textContent = euros(Math.abs(Number(fila.importe)), "salida");
+    boton.append(nombre, pista, valor);
+    host.append(boton);
+  }
+}
+
+function pintarInsights(frases) {
+  const lista = document.getElementById("insights");
+  limpiar(lista);
+  for (const frase of frases) {
+    const li = document.createElement("li");
+    li.textContent = frase;
+    lista.append(li);
+  }
+}
+
+function pintarLectura(datos) {
+  const host = document.getElementById("lectura");
+  limpiar(host);
+  const modelo = document.getElementById("modelo");
+  const boton = document.getElementById("generar");
+  if (datos.parrafos && datos.parrafos.length) {
+    modelo.textContent = "Modelo " + (datos.modelo || "");
+    for (const frase of datos.parrafos) {
+      const p = document.createElement("p");
+      p.textContent = frase;
+      host.append(p);
+    }
+    boton.textContent = "Volver a generar";
+    boton.dataset.nuevo = "1";
+  } else {
+    modelo.textContent = "";
+    const p = document.createElement("p");
+    p.className = "empty";
+    p.textContent = "Pulsa Generar lectura para pedir el resumen a Gemini.";
+    host.append(p);
+    boton.textContent = "Generar lectura";
+    boton.dataset.nuevo = "0";
+  }
+}
+
+function comparar(a, b) {
+  const clave = tablaEstado.orden;
+  let va;
+  let vb;
+  if (clave === "importe") {
+    va = Number(a.importe);
+    vb = Number(b.importe);
+  } else {
+    va = String(a[clave] || "").toLocaleLowerCase("es");
+    vb = String(b[clave] || "").toLocaleLowerCase("es");
+  }
+  if (va < vb) return tablaEstado.dir === "asc" ? -1 : 1;
+  if (va > vb) return tablaEstado.dir === "asc" ? 1 : -1;
+  return 0;
+}
+
+function filasVisibles() {
+  const texto = tablaEstado.texto.trim().toLocaleLowerCase("es");
+  return movimientosCache.filter((fila) => {
+    if (tablaEstado.direccion && fila.direccion !== tablaEstado.direccion) return false;
+    if (tablaEstado.origen && fila.origen !== tablaEstado.origen) return false;
+    if (tablaEstado.categoria && fila.categoria !== tablaEstado.categoria) return false;
+    if (!texto) return true;
+    const blob = (fila.concepto + " " + fila.detalle + " " + fila.etiqueta).toLocaleLowerCase("es");
+    return blob.includes(texto);
+  }).sort(comparar);
+}
+
+function marcarOrden() {
+  document.querySelectorAll("th[data-col]").forEach((th) => {
+    if (th.dataset.col !== tablaEstado.orden) {
+      th.setAttribute("aria-sort", "none");
+      return;
+    }
+    th.setAttribute("aria-sort", tablaEstado.dir === "asc" ? "ascending" : "descending");
+  });
+}
+
+function pintarTabla() {
+  const cuerpo = document.getElementById("tabla");
+  const visibles = filasVisibles();
+  const cuenta = document.getElementById("cuenta");
+  cuenta.textContent = visibles.length + " de " + movimientosCache.length;
+  marcarOrden();
+  limpiar(cuerpo);
+  if (!visibles.length) {
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 5;
+    td.className = "empty";
+    td.textContent = "No hay movimientos para este filtro.";
+    tr.append(td);
+    cuerpo.append(tr);
+    return;
+  }
+  for (const fila of visibles) {
+    const tr = document.createElement("tr");
+    const fecha = document.createElement("td");
+    fecha.className = "num";
+    fecha.textContent = fila.fecha;
+    const concepto = document.createElement("td");
+    concepto.textContent = fila.concepto;
+    if (fila.detalle) {
+      const detalle = document.createElement("span");
+      detalle.className = "detalle";
+      detalle.textContent = fila.detalle;
+      concepto.append(detalle);
+    }
+    const categoria = document.createElement("td");
+    categoria.textContent = fila.etiqueta;
+    const origen = document.createElement("td");
+    const badge = document.createElement("span");
+    badge.className = "badge" + (fila.origen === "pendiente" || fila.revisar ? " revisar" : "");
+    badge.textContent = (origenTexto[fila.origen] || fila.origen) + (fila.revisar ? " · revisar" : "");
+    origen.append(badge);
+    const importe = document.createElement("td");
+    importe.className = "num " + (Number(fila.importe) < 0 ? "neg" : "pos");
+    importe.textContent = euros(fila.importe);
+    tr.append(fecha, concepto, categoria, origen, importe);
+    cuerpo.append(tr);
+  }
+}
+
+function rellenarFiltroCategoria(filas) {
+  const select = document.getElementById("filtro-categoria");
+  const previo = tablaEstado.categoria;
+  limpiar(select);
+  opcion(select, "", "Todas");
+  const mapa = new Map();
+  for (const fila of filas) mapa.set(fila.categoria, fila.etiqueta);
+  const ordenadas = Array.from(mapa.entries()).sort((a, b) => a[1].localeCompare(b[1], "es"));
+  for (const par of ordenadas) opcion(select, par[0], par[1]);
+  select.value = mapa.has(previo) || previo === "" ? previo : "";
+  tablaEstado.categoria = select.value;
+}
+
+function pintarRango(datos, kpisDatos) {
+  const nodo = document.getElementById("rango");
+  if (!datos.movimientos) {
+    nodo.textContent = "La base está vacía. Carga un PDF o un Excel.";
+    return;
+  }
+  if (kpisDatos && kpisDatos.mes && kpisDatos.mes !== "todos") {
+    let frase = nombreMes(kpisDatos.mes) + " · " + kpisDatos.movimientos + " movimientos";
+    frase += kpisDatos.completo ? " · mes completo" : " · mes incompleto";
+    nodo.textContent = frase;
+    return;
+  }
+  let frase = "Del " + datos.desde + " al " + datos.hasta + " · " + datos.movimientos + " movimientos";
+  if (datos.pendientes) frase += " · " + datos.pendientes + " sin clasificar";
+  nodo.textContent = frase;
+}
+
+function pintarPie(datos) {
+  const nodo = document.getElementById("pie");
+  const rango = datos.desde ? " Datos del " + datos.desde + " al " + datos.hasta + "." : "";
+  nodo.textContent = "Cifras leídas de " + datos.base + " en cada visita." + rango
+    + " La lectura larga la escribe Gemini y queda guardada."
+    + " Una corrección tuya gana a Jev."
+    + " El ahorro y los Bizum a personas no entran en el consumo.";
+}
+
+function elegirMes(mes) {
+  const select = document.getElementById("mes");
+  select.value = select.value === mes ? "todos" : mes;
+  cargar();
+}
+
+function elegirCategoria(categoria) {
+  tablaEstado.categoria = tablaEstado.categoria === categoria ? "" : categoria;
+  const select = document.getElementById("filtro-categoria");
+  if (tablaEstado.categoria && !Array.from(select.options).some((item) => item.value === tablaEstado.categoria)) {
+    opcion(select, categoria, categoria);
+  }
+  select.value = tablaEstado.categoria;
+  pintarCategorias(categoriasCache, tablaEstado.categoria);
+  pintarTabla();
+}
+
+function alOrdenar(clave) {
+  if (tablaEstado.orden === clave) {
+    tablaEstado.dir = tablaEstado.dir === "asc" ? "desc" : "asc";
+  } else {
+    tablaEstado.orden = clave;
+    tablaEstado.dir = clave === "fecha" || clave === "importe" ? "desc" : "asc";
+  }
+  pintarTabla();
+}
+
+async function cargar() {
+  const aviso = document.getElementById("aviso");
+  aviso.hidden = true;
+  const mes = document.getElementById("mes").value || "todos";
+  const consulta = "mes=" + encodeURIComponent(mes);
+  try {
+    const [datosKpi, evolucionDatos, categoriasDatos, hechos, lectura, movimientos, situacion] = await Promise.all([
+      pedir("/api/kpis?" + consulta),
+      pedir("/api/evolucion"),
+      pedir("/api/categorias?" + consulta),
+      pedir("/api/insights?" + consulta),
+      pedir("/api/lectura?" + consulta),
+      pedir("/api/movimientos?" + consulta + "&limit=2000"),
+      pedir("/api/estado")
+    ]);
+    mesActivo = mes === "todos" ? "" : mes;
+    serieCache = evolucionDatos.meses;
+    categoriasCache = categoriasDatos.consumo;
+    movimientosCache = movimientos.movimientos;
+    pintarKpis(datosKpi);
+    pintarEvolucion(serieCache, mesActivo);
+    pintarCategorias(categoriasCache, tablaEstado.categoria);
+    pintarInsights(hechos.frases);
+    pintarLectura(lectura);
+    rellenarFiltroCategoria(movimientosCache);
+    pintarCategorias(categoriasCache, tablaEstado.categoria);
+    pintarTabla();
+    pintarRango(situacion, datosKpi);
+    pintarPie(situacion);
+  } catch (error) {
+    aviso.hidden = false;
+    aviso.textContent = error.message;
+  }
+}
+
+async function generarLectura() {
+  const boton = document.getElementById("generar");
+  const aviso = document.getElementById("aviso");
+  boton.disabled = true;
+  aviso.hidden = true;
+  const mes = document.getElementById("mes").value || "todos";
+  const nuevo = boton.dataset.nuevo === "1" ? "&nuevo=1" : "";
+  try {
+    const datos = await pedir("/api/lectura?mes=" + encodeURIComponent(mes) + nuevo, "POST");
+    pintarLectura(datos);
+  } catch (error) {
+    aviso.hidden = false;
+    aviso.textContent = error.message;
+  } finally {
+    boton.disabled = false;
+  }
+}
+
+async function arrancar() {
+  const select = document.getElementById("mes");
+  try {
+    const datos = await pedir("/api/meses");
+    opcion(select, "todos", "Todo el periodo");
+    for (const mes of datos.meses) {
+      opcion(select, mes.mes, nombreMes(mes.mes) + (mes.completo ? "" : " · incompleto"));
+    }
+  } catch (error) {
+    const aviso = document.getElementById("aviso");
+    aviso.hidden = false;
+    aviso.textContent = "No puedo leer la base. Arranca el panel con python -m bbva_gastos servir. " + error.message;
+    return;
+  }
+  select.addEventListener("change", cargar);
+  document.getElementById("vista-barras").addEventListener("click", () => {
+    vista = "barras";
+    document.getElementById("vista-barras").setAttribute("aria-pressed", "true");
+    document.getElementById("vista-lineas").setAttribute("aria-pressed", "false");
+    pintarEvolucion(serieCache, mesActivo);
+  });
+  document.getElementById("vista-lineas").addEventListener("click", () => {
+    vista = "lineas";
+    document.getElementById("vista-barras").setAttribute("aria-pressed", "false");
+    document.getElementById("vista-lineas").setAttribute("aria-pressed", "true");
+    pintarEvolucion(serieCache, mesActivo);
+  });
+  document.getElementById("series").addEventListener("click", (evento) => {
+    const boton = evento.target.closest("[data-serie]");
+    if (!boton) return;
+    seriesOn[boton.dataset.serie] = !seriesOn[boton.dataset.serie];
+    boton.setAttribute("aria-pressed", seriesOn[boton.dataset.serie] ? "true" : "false");
+    pintarEvolucion(serieCache, mesActivo);
+  });
+  document.getElementById("evolucion").addEventListener("click", (evento) => {
+    const hit = evento.target.closest("[data-mes]");
+    if (hit) elegirMes(hit.getAttribute("data-mes"));
+  });
+  document.getElementById("evolucion").addEventListener("keydown", (evento) => {
+    if (evento.key !== "Enter" && evento.key !== " ") return;
+    const hit = evento.target.closest("[data-mes]");
+    if (!hit) return;
+    evento.preventDefault();
+    elegirMes(hit.getAttribute("data-mes"));
+  });
+  document.getElementById("evolucion").addEventListener("mouseover", (evento) => {
+    const hit = evento.target.closest("[data-mes]");
+    if (!hit) return;
+    const fila = serieCache.find((item) => item.mes === hit.getAttribute("data-mes"));
+    if (fila) mostrarTip({ currentTarget: hit, clientX: evento.clientX, clientY: evento.clientY }, fila);
+  });
+  document.getElementById("evolucion").addEventListener("mouseleave", () => {
+    document.getElementById("tip").hidden = true;
+  });
+  document.getElementById("evolucion").addEventListener("focusin", (evento) => {
+    const hit = evento.target.closest("[data-mes]");
+    if (!hit) return;
+    const fila = serieCache.find((item) => item.mes === hit.getAttribute("data-mes"));
+    if (fila) mostrarTip({ currentTarget: hit }, fila);
+  });
+  document.getElementById("evolucion").addEventListener("focusout", () => {
+    document.getElementById("tip").hidden = true;
+  });
+  document.getElementById("categorias").addEventListener("click", (evento) => {
+    const boton = evento.target.closest("[data-categoria]");
+    if (boton) elegirCategoria(boton.dataset.categoria);
+  });
+  document.getElementById("generar").addEventListener("click", generarLectura);
+  document.querySelector("thead").addEventListener("click", (evento) => {
+    const boton = evento.target.closest("[data-sort]");
+    if (boton) alOrdenar(boton.dataset.sort);
+  });
+  document.getElementById("buscar").addEventListener("input", (evento) => {
+    tablaEstado.texto = evento.target.value;
+    pintarTabla();
+  });
+  document.getElementById("direccion").addEventListener("change", (evento) => {
+    tablaEstado.direccion = evento.target.value;
+    pintarTabla();
+  });
+  document.getElementById("origen").addEventListener("change", (evento) => {
+    tablaEstado.origen = evento.target.value;
+    pintarTabla();
+  });
+  document.getElementById("filtro-categoria").addEventListener("change", (evento) => {
+    tablaEstado.categoria = evento.target.value;
+    pintarCategorias(categoriasCache, tablaEstado.categoria);
+    pintarTabla();
+  });
+  window.addEventListener("resize", () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => pintarEvolucion(serieCache, mesActivo), 150);
+  });
+  opcion(document.getElementById("filtro-categoria"), "", "Todas");
+  cargar();
+}
+
+arrancar();
+</script>
+</body>
+</html>

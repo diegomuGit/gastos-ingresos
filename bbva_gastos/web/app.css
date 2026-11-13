@@ -1,0 +1,373 @@
+/* El color y la tipografía viven en bbva-tokens.css. Aquí solo está la composición. */
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: var(--bbva-page-margin);
+}
+
+.num { font-variant-numeric: tabular-nums; }
+
+header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: var(--bbva-gap);
+  flex-wrap: wrap;
+  padding-bottom: var(--bbva-x);
+  border-bottom: 1px solid var(--bbva-border);
+  margin-bottom: var(--bbva-gap);
+}
+
+.brand { display: flex; align-items: baseline; gap: var(--bbva-space-2); }
+
+.logo {
+  font-family: var(--bbva-font-text);
+  font-weight: var(--bbva-weight-medium);
+  font-size: var(--bbva-size-section);
+  letter-spacing: 0.02em;
+  color: var(--bbva-action);
+  line-height: 1;
+}
+
+.subtitle {
+  color: var(--bbva-text-secondary);
+  font-size: var(--bbva-size-label);
+  margin: 8px 0 0;
+}
+
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+label {
+  font-size: var(--bbva-size-label);
+  color: var(--bbva-text-secondary);
+}
+
+.select {
+  font-family: inherit;
+  font-size: var(--bbva-size-label);
+  color: var(--bbva-text);
+  background: var(--bbva-surface);
+  border: 1px solid var(--bbva-border-strong);
+  border-radius: var(--bbva-radius-sm);
+  padding: 12px 16px;
+  min-height: 44px;
+}
+
+.select:focus {
+  outline: 2px solid var(--bbva-action);
+  outline-offset: 2px;
+  border-color: var(--bbva-action);
+}
+
+.grid { display: grid; gap: var(--bbva-gap); margin-bottom: var(--bbva-gap); min-width: 0; }
+
+.card, .table-scroll, .chart, .tools, header, .chart-wrap { min-width: 0; max-width: 100%; }
+
+.kpis { grid-template-columns: repeat(auto-fit, minmax(420px, 1fr)); }
+
+.split { grid-template-columns: 1.4fr 1fr; }
+
+@media (max-width: 900px) {
+  .kpis, .split { grid-template-columns: 1fr; }
+}
+
+.card {
+  background: var(--bbva-surface);
+  border: 1px solid var(--bbva-border);
+  border-radius: var(--bbva-radius-md);
+  padding: var(--bbva-gap);
+}
+
+.kpi-label {
+  font-size: var(--bbva-size-label);
+  color: var(--bbva-text-secondary);
+  margin: 0 0 8px;
+}
+
+.kpi-value {
+  font-family: var(--bbva-font-text);
+  font-size: var(--bbva-size-kpi);
+  line-height: 1;
+  font-weight: var(--bbva-weight-book);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.kpi-note {
+  margin: 12px 0 0;
+  font-size: var(--bbva-size-label);
+  color: var(--bbva-text-secondary);
+}
+
+.delta { margin: 12px 0 0; font-size: var(--bbva-size-body); font-weight: var(--bbva-weight-medium); }
+.pos { color: var(--bbva-positive); }
+.neg { color: var(--bbva-negative); }
+.warn { color: var(--bbva-ocre-dark); }
+
+.card h2 { margin: 0; }
+.card h3 {
+  margin: 16px 0 8px;
+  font-size: var(--bbva-size-card-title);
+}
+
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--bbva-space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--bbva-space-2);
+}
+
+.hint {
+  margin: 0 0 8px;
+  font-size: var(--bbva-size-caption);
+  color: var(--bbva-text-secondary);
+}
+
+.chip, .btn, .sort, .field, .hbar-btn {
+  font-family: inherit;
+}
+
+.chip, .btn, .hbar-btn, .sort {
+  cursor: pointer;
+}
+
+.chip, .btn, .field, .hbar-btn, .sort, .select {
+  min-height: 44px;
+}
+
+.chip:focus-visible, .btn:focus-visible, .field:focus-visible,
+.sort:focus-visible, .hbar-btn:focus-visible, .select:focus-visible,
+.chart [role="button"]:focus-visible {
+  outline: 2px solid var(--bbva-action);
+  outline-offset: 2px;
+}
+
+.vista, .legend { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.chip {
+  font-size: var(--bbva-size-caption);
+  padding: 8px 16px;
+  border-radius: var(--bbva-radius-pill);
+  border: 1px solid var(--bbva-border-strong);
+  background: var(--bbva-surface);
+  color: var(--bbva-text);
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--bbva-grey-2);
+  border-color: var(--bbva-action);
+}
+
+.btn {
+  font-size: var(--bbva-size-body);
+  font-weight: var(--bbva-weight-medium);
+  padding: 8px 20px;
+  border-radius: var(--bbva-radius-pill);
+  border: 0;
+  background: var(--bbva-action);
+  color: var(--bbva-sand);
+}
+
+.btn:disabled { opacity: 0.55; }
+
+.modelo, #lectura p { margin: 0 0 8px; }
+.modelo { font-size: var(--bbva-size-caption); color: var(--bbva-text-secondary); }
+
+.legend {
+  font-size: var(--bbva-size-caption);
+  color: var(--bbva-text-secondary);
+  margin-bottom: 8px;
+}
+
+.swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 4px;
+  margin-right: 8px;
+  vertical-align: -1px;
+}
+
+.swatch.ing { background: var(--bbva-chart-1); }
+.swatch.con { background: var(--bbva-chart-2); }
+.swatch.aho { background: var(--bbva-chart-3); }
+
+.chart-wrap { position: relative; }
+
+.chart {
+  height: 280px;
+  overflow-x: auto;
+}
+
+.chart svg { display: block; max-width: 100%; }
+
+.chart text {
+  font-family: var(--bbva-font-text);
+  font-size: 12px;
+  fill: var(--bbva-chart-axis);
+}
+
+.chart .eje-incompleto { fill: var(--bbva-ocre-dark); }
+.chart .eje-activo { fill: var(--bbva-text); font-weight: var(--bbva-weight-medium); }
+
+.chart line { stroke-width: 1; }
+
+.tip {
+  position: absolute;
+  z-index: 2;
+  background: var(--bbva-surface);
+  border: 1px solid var(--bbva-border);
+  border-radius: var(--bbva-radius-sm);
+  padding: 8px 12px;
+  font-size: var(--bbva-size-caption);
+  pointer-events: none;
+  max-width: 240px;
+}
+
+.tip p { margin: 0; }
+.tip-titulo { font-weight: var(--bbva-weight-medium); margin-bottom: 4px; }
+
+.hcats {
+  height: 320px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.hbar-btn {
+  display: grid;
+  grid-template-columns: minmax(96px, 148px) 1fr minmax(88px, 112px);
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: var(--bbva-radius-sm);
+  background: transparent;
+  text-align: left;
+  color: inherit;
+}
+
+.hbar-btn[aria-pressed="true"] { background: var(--bbva-grey-2); }
+
+.hbar-name, .hbar-value {
+  font-size: var(--bbva-size-caption);
+  color: var(--bbva-text-secondary);
+}
+
+.hbar-value { text-align: right; font-variant-numeric: tabular-nums; color: var(--bbva-text); }
+
+.hbar-track { display: block; background: var(--bbva-grey-2); border-radius: 4px; height: 8px; }
+
+.hbar {
+  display: block;
+  height: 8px;
+  border-radius: 4px;
+  background: var(--bbva-chart-1);
+}
+
+.hbar.resto { background: var(--bbva-chart-8); }
+
+.insights { margin: 0; padding-left: 20px; }
+.insights li { margin: 0 0 8px; }
+.insights li:last-child { margin-bottom: 0; }
+
+.tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: var(--bbva-space-2);
+}
+
+.field {
+  font-size: var(--bbva-size-label);
+  color: var(--bbva-text);
+  background: var(--bbva-surface);
+  border: 1px solid var(--bbva-border-strong);
+  border-radius: var(--bbva-radius-sm);
+  padding: 12px 16px;
+  min-width: 180px;
+}
+
+.cuenta {
+  margin: 0;
+  font-size: var(--bbva-size-label);
+  color: var(--bbva-text-secondary);
+}
+
+.table-scroll { max-height: 560px; overflow: auto; }
+
+table { width: 100%; min-width: 720px; border-collapse: collapse; }
+
+th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--bbva-surface);
+  font-size: var(--bbva-size-label);
+  font-weight: var(--bbva-weight-medium);
+  color: var(--bbva-text-secondary);
+  text-align: left;
+  border-bottom: 1px solid var(--bbva-grey-3);
+  padding: 0 8px 0 0;
+}
+
+.sort {
+  width: 100%;
+  padding: 8px 8px 8px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  text-align: left;
+}
+
+th.num .sort { text-align: right; }
+
+th[aria-sort="ascending"] .sort::after { content: " ↑"; }
+th[aria-sort="descending"] .sort::after { content: " ↓"; }
+
+td {
+  font-size: var(--bbva-size-data);
+  padding: 12px 8px 12px 0;
+  border-bottom: 1px solid var(--bbva-grey-2);
+  vertical-align: top;
+}
+
+th.num, td.num { text-align: right; }
+
+tr:hover td { background: var(--bbva-sand); }
+
+.detalle { display: block; color: var(--bbva-text-secondary); font-size: var(--bbva-size-caption); }
+
+.badge {
+  display: inline-block;
+  border-radius: var(--bbva-radius-pill);
+  padding: 4px 12px;
+  font-size: var(--bbva-size-caption);
+  font-weight: var(--bbva-weight-medium);
+  background: var(--bbva-sand);
+  color: var(--bbva-text-secondary);
+}
+
+.badge.revisar { background: var(--bbva-ocre-light); color: var(--bbva-ocre-dark); }
+
+.empty, .error {
+  margin: 0;
+  color: var(--bbva-text-secondary);
+}
+
+.error { color: var(--bbva-negative); }
+
+footer {
+  margin-top: var(--bbva-space-2);
+  font-size: var(--bbva-size-caption);
+  color: var(--bbva-text-secondary);
+}
