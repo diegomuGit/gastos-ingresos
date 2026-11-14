@@ -2,7 +2,7 @@
 
 La hoja **MyInvestor Cartera** es solo la base de datos. El dashboard la lee y hace todos los cálculos; nunca escribe en ella.
 
-Novedades de la v4 (detalle en **CAMBIOS_v4.md**): sección **Rendimiento diario** con barras de cada día (solo efecto mercado), **drivers** de la rentabilidad (contribución por activo enlazada con Carino y base 100 por activo), periodo «1 día», BTC aparte con los fines de semana sumados al lunes, y todo el cálculo separado en funciones puras portables.
+Novedades de la v4: sección **Rendimiento diario** con barras de cada día (solo efecto mercado), **drivers** de la rentabilidad (contribución por activo enlazada con Carino y base 100 por activo), periodo «1 día», BTC aparte con los fines de semana sumados al lunes, y todo el cálculo separado en funciones puras portables.
 
 ## Instalar (primera vez)
 1. Abre la hoja y ve a **Extensiones > Apps Script**.
@@ -10,7 +10,7 @@ Novedades de la v4 (detalle en **CAMBIOS_v4.md**): sección **Rendimiento diario
 3. Pulsa **+ > HTML**, ponle de nombre **Index** (sin .html) y pega el contenido de **Index.html**.
 4. Guarda (Ctrl/Cmd + S).
 5. **Implementar > Nueva implementación** > engranaje > **Aplicación web**. Ejecutar como: **Yo**. Quién tiene acceso: **Solo yo**.
-6. Pulsa **Implementar**, autoriza (si Google avisa de «app no verificada»: *Configuración avanzada > Ir a…*) y guarda en marcadores la **URL de la aplicación web**: ese es tu dashboard.
+6. Pulsa **Implementar**, concede los permisos de tu propio proyecto y guarda en marcadores la **URL de la aplicación web**: ese es tu dashboard.
 
 **Permisos.** La v4 no pide ninguno nuevo: igual que la v3, solo usa `SpreadsheetApp` (lectura de la hoja) y `HtmlService` (servir la página). `doGet` no cambia. Si en el proyecto existe `appsscript.json`, no hace falta tocarlo.
 
@@ -44,9 +44,9 @@ La URL no cambia y, al ser los mismos permisos, no debería volver a pedir autor
 - **Fines de semana.** La hoja no tiene filas de sábado ni domingo: el movimiento del BTC del fin de semana se suma al lunes y esa barra se marca con ◆ **«incluye fin de semana»** (tooltip, leyenda y tabla). No se inventan barras. Igual con cualquier día natural sin fila entre dos registros («incluye 1 día laborable sin dato», etc.).
 
 **Qué ha movido MyInvestor (contribución por activo).** Contribución de un activo cada día = peso del día anterior × rendimiento del día (en puntos porcentuales y en euros). Sumadas dan el rendimiento del día; para el periodo se enlazan con **Carino**, así que suman exactamente la TWR del periodo. Barras de más positiva a más negativa, con la **caja** como un activo más que rinde 0 %. Debajo, la **contribución acumulada en el tiempo** (con 20 días, 3 meses o YTD).
-- **Residuo.** TWR del día según Historico − suma de contribuciones. Con los datos reales es de céntimos (como mucho −0,82 € en un día). Se muestra siempre en la cabecera de los drivers y, si se nota, como barra propia.
-- **Sin detalle por posición.** Si una foto de posiciones no cuadra con Historico (Total − posiciones − efectivo), esos días no se reparten por activo: van enteros a «Sin detalle por posición», con el motivo. Hoy pasa con el 24-sep: el 19-sep las acciones se «recuperaron» de otro día y no cuadran por −341,20 €.
-- **Cobertura.** El detalle diario por posición va del 24-sep al 29-oct (~1 mes). Con 3 meses o YTD lo anterior se ve solo como total y la página lo dice.
+- **Residuo.** TWR del día según Historico − suma de contribuciones. Se muestra siempre en la cabecera de los drivers y, si se nota, como barra propia.
+- **Sin detalle por posición.** Si una foto de posiciones no cuadra con Historico (Total − posiciones − efectivo), esos días no se reparten por activo: van enteros a «Sin detalle por posición», con el motivo.
+- **Cobertura.** Los días sin posiciones se muestran solo como total y la página indica la cobertura disponible.
 
 **Base 100 por activo.** Rendimiento de cada activo, de MyInvestor (TWR) y del BTC con 100 = inicio del periodo. **Enseña rendimiento, no peso**: una acción que pesa un 4 % puede caer un 13 % y restar solo medio punto (lo que suma o resta cada activo está en los drivers).
 
@@ -60,8 +60,8 @@ La URL no cambia y, al ser los mismos permisos, no debería volver a pedir autor
 
 ## Bloque Cripto
 - Valor, cantidad, precio, coste, plusvalía latente (valor − coste) y peso sobre el patrimonio total; gráfico de valor frente a coste y tabla de compras de Crypto_Movs.
-- **Coste**, por este orden: último `Coste_EUR` de la pestaña Crypto → suma de Crypto_Movs (coste medio ponderado si hay ventas) → valor fijo `CRYPTO_FALLBACK.costeEur` de Code.gs (1.493,35 €). El dashboard indica siempre de dónde sale; si es el valor fijo, actualízalo cuando compres o vendas.
-- **Nota de los ~0,004 BTC sin coste.** Unos 0,004 BTC del saldo (0,00400781 con los datos actuales) no tienen coste registrado: suman al valor pero no al coste, así que la plusvalía latente sale sobreestimada. El dashboard lo avisa y muestra también el resultado contando solo los BTC con coste. La cantidad sin coste es saldo − BTC con coste según Crypto_Movs; sin Crypto_Movs se usa el valor fijo `CRYPTO_FALLBACK.btcSinCoste` (0,004).
+- **Coste**, por este orden: `Coste_EUR` de la valoración mostrada o historial de `Crypto_Movs` hasta ese día. Si falta el coste, la plusvalía queda sin dato.
+- Si el historial de compras solo explica parte del saldo, el dashboard muestra cuántas unidades tienen coste registrado.
 
 ## Rentabilidad (tal como la calcula Code.gs)
 - **TWR (ponderada por tiempo).** Entre cada dos valoraciones consecutivas se aplica Dietz modificado: `r = (V_fin − V_ini − F) / (V_ini + Σ w·f)`, donde `F` son los flujos del tramo y `w` la fracción del tramo, en días, que cada flujo estuvo dentro. Los tramos se encadenan: `(1 + r₁) · (1 + r₂) · … − 1`. Así una aportación o una retirada no cuenta como ganancia ni como pérdida.
@@ -93,7 +93,7 @@ El resto sigue funcionando y cada hueco se explica con un mensaje:
 - **Posiciones**: sin asignación, geografía, tabla ni concentración; el Total sigue saliendo de Historico y las barras diarias también, pero «sin detalle por posición».
 - **Fondos_Ref**: sin TER, clase ni geografía de fondos. **Targets**: objetivo 5 / 80 / 15 y benchmark MSCI World. **Flujos**: se asume que no hubo aportaciones ni retiradas (salvo las de la columna de Historico).
 - **Crypto**: el bloque muestra «Sin datos de cripto», el patrimonio total es solo MyInvestor y la vista diaria va sin BTC.
-- **Crypto_Movs**: sin detalle de compras; el coste sale de `Coste_EUR` o del valor fijo de Code.gs y los flujos de la cripto se deducen del cambio de cantidad.
+- **Crypto_Movs**: sin detalle de compras; solo se muestra `Coste_EUR` cuando figura en la valoración y los flujos de la cripto se deducen del cambio de cantidad.
 - Sin Historico ni Crypto: «Sin datos de patrimonio».
 
 Si faltan Historico o las posiciones, o una pestaña existe pero no se encuentra su cabecera (por ejemplo, una columna clave renombrada), aparece además un aviso arriba y en **Estado de los datos**.
@@ -105,11 +105,13 @@ Si faltan Historico o las posiciones, o una pestaña existe pero no se encuentra
 - **Index.html** solo pinta: no calcula rentabilidades, contribuciones ni bases 100 (todo llega ya calculado).
 
 ## Datos y pruebas en local
-A Apps Script solo se pegan `Code.gs` e `Index.html`. Lo demás sirve para probar en local con Node y Chrome, sin Google:
-- `data/*.csv` es el **export real de la hoja** (valores sin formato; fechas como número de serie de Sheets, p. ej. 46324 = 29-oct-2026), con datos hasta el 29-oct-2026. `tests/fixtures/` es una copia fija que usan los tests. `data/Crypto_registro_real.csv` es el primer registro de cripto (12-oct), que usan algunos escenarios.
-- `node harness.js --now 2026-10-29T23:30:00+01:00`: ejecuta el cálculo de Code.gs con los CSV de `data/` y genera `data/mock.json`.
-- `node tests/verify.js`: comprueba el cálculo con los datos reales (cabecera, cripto, TWR, fechas, cabeceras tolerantes, pestañas que faltan, solo lectura) y lo nuevo de v4 (barras diarias recalculadas desde los CSV, GOOG del 29-oct, Carino y residuo, base 100, BTC en fin de semana, frontera adaptador / cálculo puro).
-- `node tests/render_check.js`: render en Chrome headless a 1440 y 390 px en 13 escenarios (pestañas que faltan, CDN bloqueado, tema oscuro, «1 día», YTD, fallo del servidor…).
-- `node tests/build_preview.js`: monta `preview.html` con `data/mock.json` en lugar de la hoja.
-- `tests/shoot.sh preview.html preview.png 1440` y `tests/shoot.sh preview.html preview_mobile.png 390`: capturas a página completa (`tests/shoot.sh <html> <png> <ancho> [fragmento]`; el fragmento admite p. ej. `theme=dark`, `dwin=1d&dday=2026-10-29&dunit=eur&dsel=GOOG` o `tip=1`).
-- `tests/make_test_crypto.js <carpeta>`: genera los datos sintéticos de cripto de v3 en otra carpeta (se niega a escribir en `data/` o `tests/fixtures/`).
+
+Exporta las pestañas como CSV con su nombre (`Historico.csv`, `Crypto.csv`, etc.) a `dashboard_myinvestor/data/`. Desde la raíz del repositorio:
+
+```powershell
+node dashboard_myinvestor/harness.js --out data/patrimonio.json
+.\.venv\Scripts\python -m bbva_gastos servir
+node --test tests/test_myinvestor.cjs
+```
+
+Abre `/inversion` en el servidor local y pulsa **Actualizar** después de regenerar el JSON. Los CSV y el JSON se guardan en carpetas ignoradas por Git. La prueba de Node usa datos ficticios. Consulta el README raíz para activar los gráficos locales.

@@ -524,6 +524,15 @@ function loadData() {
     catch (e) { showError(e); }
   }
   function fail(e) { done(); showError(e); }
+  if (document.body.dataset.patrimonioLocal === 'true') {
+    fetch('/api/inversion', { cache: 'no-store' }).then(function (res) {
+      return res.json().then(function (data) {
+        if (!res.ok) throw new Error(data.error || 'No se pudo leer la cartera local.');
+        return data;
+      });
+    }).then(ok, fail);
+    return;
+  }
   if (!(window.google && google.script && google.script.run)) { fail(new Error('google.script.run no está disponible: abre el dashboard desde la URL de la aplicación web.')); return; }
   google.script.run.withSuccessHandler(ok).withFailureHandler(fail).getDashboardData();
 }
@@ -1136,8 +1145,10 @@ function renderFlows() {
   el('flowsSub').textContent = f.flujosFound ? 'Pestaña Flujos' : (f.known ? 'Columna de aportaciones de Historico' : 'Sin pestaña Flujos');
   var html = '<div class="stats s4">' + stat('Aportación neta', eurS(f.total, 0), 'todo el historial') + stat('En ' + y, eurS(f.anio, 0), 'neto del año') +
     stat('Este mes', eurS(f.mes, 0), D.meta.asOf ? MESES[+D.meta.asOf.substring(5, 7) - 1] + ' ' + y : '') + stat('Movimientos', f.n, eur(f.aportaciones, 0) + ' aportado · ' + eur(Math.abs(f.retiradas), 0) + ' retirado') + '</div>';
+  if (document.body.dataset.patrimonioLocal === 'true') html += '<p class="foot"><a href="/#traspasos">Revisar traspasos BBVA → MyInvestor</a>' +
+    (D.traspasosBBVA ? ' · ' + nf(D.traspasosBBVA, 0) + ' enlazados' : '') + '</p>';
   if (f.items.length) html += '<div class="scroll-y"><table class="tbl"><thead><tr><th class="l">Fecha</th><th class="l">Tipo</th><th>Importe</th></tr></thead><tbody>' +
-    f.items.map(function (x) { return '<tr title="' + esc(x.nota) + '"><td class="l">' + dL(x.date) + '</td><td class="l">' + esc(x.tipo) + (x.origen === 'Historico' ? '<span class="m">de Historico</span>' : '') + '</td><td class="' + cls(x.importe) + '"><b>' + eurS(x.importe) + '</b></td></tr>'; }).join('') + '</tbody></table></div>';
+    f.items.map(function (x) { return '<tr title="' + esc(x.nota) + '"><td class="l">' + dL(x.date) + '</td><td class="l">' + esc(x.tipo) + (x.origen === 'Historico' ? '<span class="m">de Historico</span>' : '') + (x.traspasoBBVA ? '<span class="m">Traspaso BBVA confirmado</span>' : '') + '</td><td class="' + cls(x.importe) + '"><b>' + eurS(x.importe) + '</b></td></tr>'; }).join('') + '</tbody></table></div>';
   else html += emptyBox(f.known ? 'Sin aportaciones ni retiradas' : 'No hay registro de flujos', f.known ? 'No hay movimientos de dinero registrados (las filas de tipo «nota» no cuentan). Toda la variación del patrimonio es de mercado.' : 'Falta la pestaña Flujos y Historico no tiene columna de aportaciones: la rentabilidad se calcula como si no hubiera habido aportaciones.');
   box.innerHTML = html;
 }
@@ -1157,7 +1168,7 @@ function renderCrypto() {
   if (isNum(D.meta.crDaysOld) && D.meta.crDaysOld > 2) chips.push('<span class="chip warn">Dato de hace ' + D.meta.crDaysOld + ' días</span>');
   head.innerHTML += '<div class="chips">' + chips.join('') + '</div>';
 
-  var last = c.last, w7 = c.precioCambio && c.precioCambio.d7, origen = { hoja: 'pestaña Crypto', movs: 'suma de Crypto_Movs', fijo: 'valor fijo de Code.gs' }[c.costeOrigen] || 'n/d';
+  var last = c.last, w7 = c.precioCambio && c.precioCambio.d7, origen = { hoja: 'pestaña Crypto', movs: 'historial de Crypto_Movs' }[c.costeOrigen] || 'n/d';
   var medio = c.movs.available && isNum(c.movs.precioMedio) ? c.movs.precioMedio : (c.conCoste && isNum(c.conCoste.precioMedio) ? c.conCoste.precioMedio : null);
   var over = c.sinCoste && c.sinCoste.btc > 0;
   el('crTiles').innerHTML = [
@@ -1176,7 +1187,6 @@ function renderCrypto() {
       (cc && isNum(cc.plusvalia) ? ' Contando solo los ' + nf(cc.btc, 4) + ' ' + esc(c.activo) + ' con coste, el resultado sería ' + eurS(cc.plusvalia) + ' (' + pctS(cc.plusvaliaPct, 1) + ').' : '');
   }
   if (isNum(c.costeMovsDiff)) note += (note ? ' ' : '') + 'El coste de la pestaña Crypto no coincide con la suma de Crypto_Movs (' + eur(c.costeMovsDiff) + ').';
-  if (c.costeOrigen === 'fijo') note += (note ? ' ' : '') + 'El coste es el valor fijo guardado en Code.gs porque la hoja no lo trae: actualízalo si compras o vendes.';
   el('crNote').innerHTML = note; el('crNote').hidden = !note;
 
   renderCrChart(); renderMovs();
@@ -1212,7 +1222,7 @@ function renderCrChart() {
 
 function renderMovs() {
   var c = D.crypto, mv = c.movs, box = el('crMovs');
-  if (!mv.available) { el('crMovsSub').textContent = 'Pestaña Crypto_Movs'; box.innerHTML = emptyBox('Sin detalle de compras', (mv.reason || 'No hay movimientos.') + ' El coste mostrado sale de ' + ({ hoja: 'la pestaña Crypto', fijo: 'un valor fijo de Code.gs' }[c.costeOrigen] || 'otra fuente') + '.'); return; }
+  if (!mv.available) { el('crMovsSub').textContent = 'Pestaña Crypto_Movs'; box.innerHTML = emptyBox('Sin detalle de compras', (mv.reason || 'No hay movimientos.') + (c.costeOrigen === 'hoja' ? ' El coste sale de la pestaña Crypto.' : ' No hay coste registrado para esta valoración.')); return; }
   el('crMovsSub').textContent = 'Pestaña Crypto_Movs · ' + mv.nMovs + ' movimientos del ' + dL(mv.first) + ' al ' + dL(mv.last);
   var feeEur = mv.comisionEur;
   box.innerHTML = '<div class="stats">' +
@@ -1234,7 +1244,7 @@ function renderFooter() {
   var nOk = st.filter(function (s) { return s.found && s.level !== 'warn'; }).length, nWarn = st.filter(function (s) { return s.level === 'warn'; }).length, nNo = st.filter(function (s) { return !s.found && s.level !== 'warn'; }).length;
   el('footer').innerHTML = '<details><summary>Estado de los datos: ' + nOk + ' pestañas leídas' + (nNo ? ', ' + nNo + ' que no existen' : '') + (nWarn ? ', ' + nWarn + ' con problemas' : '') + '</summary>' +
     '<div class="scroll-x"><table class="tbl"><thead><tr><th class="l">Pestaña</th><th>Filas útiles</th><th class="l">Fechas</th><th class="l">Observaciones</th></tr></thead><tbody>' + rows + '</tbody></table></div></details>' +
-    'El dashboard solo lee la hoja; nunca escribe en ella. Calculado el ' + esc(new Date(D.meta.generatedAt).toLocaleString('es-ES')) + ' · se actualiza solo cada 5 minutos' +
+    (document.body.dataset.patrimonioLocal === 'true' ? 'Fuente: exportación local de MyInvestor. Generada el ' : 'Fuente: hoja de cartera. Calculado el ') + esc(new Date(D.meta.generatedAt).toLocaleString('es-ES')) +
     (D.spreadsheetUrl ? ' · <a href="' + esc(D.spreadsheetUrl) + '" target="_blank" rel="noopener">abrir la hoja</a>' : '') + '.';
 }
 

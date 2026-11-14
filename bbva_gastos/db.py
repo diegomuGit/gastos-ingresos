@@ -6,8 +6,9 @@ import json
 import os
 import re
 import sqlite3
+import unicodedata
 from calendar import monthrange
-from datetime import datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from pathlib import Path
 
@@ -65,6 +66,43 @@ CREATE TABLE IF NOT EXISTS ficheros (
     cargado TEXT NOT NULL,
     movimientos INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS cobertura_extractos (
+    fichero TEXT PRIMARY KEY REFERENCES ficheros(hash),
+    cuenta TEXT NOT NULL,
+    desde TEXT NOT NULL,
+    hasta TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS conciliacion (
+    primero TEXT NOT NULL REFERENCES movimientos(hash),
+    segundo TEXT NOT NULL REFERENCES movimientos(hash),
+    excluido TEXT CHECK (excluido IS NULL OR excluido IN (primero, segundo)),
+    decidido TEXT NOT NULL,
+    PRIMARY KEY (primero, segundo)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS conciliacion_excluido ON conciliacion(excluido);
+CREATE TABLE IF NOT EXISTS traspasos_inversion (
+    banco TEXT NOT NULL REFERENCES movimientos(hash),
+    aporte TEXT NOT NULL,
+    estado TEXT NOT NULL CHECK (estado IN ('confirmado', 'descartado')),
+    fecha_banco TEXT NOT NULL,
+    importe_banco TEXT NOT NULL,
+    fecha_aporte TEXT NOT NULL,
+    origen_aporte TEXT NOT NULL,
+    decidido TEXT NOT NULL,
+    PRIMARY KEY (banco, aporte)
+);
+CREATE UNIQUE INDEX IF NOT EXISTS traspasos_banco ON traspasos_inversion(banco) WHERE estado='confirmado';
+CREATE UNIQUE INDEX IF NOT EXISTS traspasos_aporte ON traspasos_inversion(aporte) WHERE estado='confirmado';
+CREATE TABLE IF NOT EXISTS saldos_bbva (
+    cuenta TEXT NOT NULL,
+    fecha TEXT NOT NULL,
+    saldo TEXT NOT NULL,
+    PRIMARY KEY(cuenta, fecha)
+);
+CREATE TABLE IF NOT EXISTS lecturas (
+    clave TEXT PRIMARY KEY, mes TEXT NOT NULL, modelo TEXT NOT NULL,
+    parrafos TEXT NOT NULL, creado TEXT NOT NULL
+);
 """
 
 
@@ -74,7 +112,20 @@ def connect(path=None):
     conn = sqlite3.connect(chosen)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA foreign_keys=ON")
     conn.executescript(SCHEMA)
+    migration = {"movimientos": {"cuenta": "TEXT NOT NULL DEFAULT ''", "categoria_manual": "TEXT",
+                                 "extracto": "TEXT NOT NULL DEFAULT ''"},
+                 "ficheros": {"cuenta": "TEXT NOT NULL DEFAULT ''"}}
+    for table, additions in migration.items():
+        if additions.keys() <= {row['name'] for row in conn.execute(f'PRAGMA table_info({table})')}:
+            continue
+        with conn:
+            conn.execute('BEGIN IMMEDIATE')
+            columns = {row['name'] for row in conn.execute(f'PRAGMA table_info({table})')}
+            for name, definition in additions.items():
+                if name not in columns:
+                    conn.execute(f'ALTER TABLE {table} ADD COLUMN {name} {definition}')
     return conn
 
 
@@ -96,6 +147,11 @@ def movement_hash(row):
     saldo = row.get("saldo")
     saldo_text = money(saldo) if saldo not in (None, "") else ""
     externo = str(row.get("id") or row.get("externo") or "")
+    cuenta = row.get("cuenta") or ""
+    divisa = row.get("divisa") or "EUR"
+    if cuenta and externo and row.get("lector") == "enable-banking":
+        identity = json.dumps(["enable-banking", cuenta, externo], ensure_ascii=False)
+        return hashlib.sha256(identity.encode("utf-8")).hexdigest()
     payload = "|".join(
         [
             str(row.get("fecha") or ""),
@@ -106,6 +162,9 @@ def movement_hash(row):
             externo,
         ]
     )
+    source = row.get('extracto') if not saldo_text else None
+    if cuenta or divisa != "EUR" or source or row.get("ocurrencia"):
+        payload = json.dumps([payload, cuenta, divisa, source, row.get("ocurrencia", 0)], ensure_ascii=False)
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
@@ -113,7 +172,7 @@ def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def upsert_movements(conn, rows):
+def upsert_movements(conn, rows, *, commit=True):
     now = _now()
     inserted = 0
     updated = 0
@@ -121,6 +180,15 @@ def upsert_movements(conn, rows):
         if not row.get("fecha"):
             continue
         digest = movement_hash(row)
+        if row.get('lector') == 'enable-banking' and row.get('cuenta') and row.get('id'):
+            known = conn.execute("SELECT hash FROM movimientos WHERE lector=? AND cuenta=? AND externo=?",
+                                 ('enable-banking', row['cuenta'], row['id'])).fetchone()
+            if not known and row.get('fichero'):
+                legacy = movement_hash({**row, 'cuenta': ''})
+                known = conn.execute("SELECT hash FROM movimientos WHERE hash=? AND cuenta='' AND lector=? AND fichero=?",
+                                     (legacy, 'enable-banking', row['fichero'])).fetchone()
+            if known:
+                digest = known['hash']
         found = conn.execute("SELECT 1 FROM movimientos WHERE hash = ?", (digest,)).fetchone()
         values = (
             row.get("fecha"),
@@ -135,13 +203,15 @@ def upsert_movements(conn, rows):
             row.get("fichero") or "",
             str(row.get("id") or row.get("externo") or ""),
             now,
+            row.get("cuenta") or "",
+            row.get("extracto") or "",
             digest,
         )
         if found:
             conn.execute(
                 """UPDATE movimientos
                    SET fecha=?, fecha_valor=?, concepto=?, detalle=?, importe=?, saldo=?,
-                       divisa=?, direccion=?, lector=?, fichero=?, externo=?, actualizado=?
+                       divisa=?, direccion=?, lector=?, fichero=?, externo=?, actualizado=?, cuenta=?, extracto=?
                    WHERE hash=?""",
                 values,
             )
@@ -150,13 +220,14 @@ def upsert_movements(conn, rows):
             conn.execute(
                 """INSERT INTO movimientos (
                        fecha, fecha_valor, concepto, detalle, importe, saldo, divisa,
-                       direccion, lector, fichero, externo, actualizado, hash,
+                       direccion, lector, fichero, externo, actualizado, cuenta, extracto, hash,
                        origen_clasificacion, revisar
-                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,'pendiente',1)""",
+                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'pendiente',1)""",
                 values,
             )
             inserted += 1
-    conn.commit()
+    if commit:
+        conn.commit()
     return inserted, updated
 
 
@@ -206,7 +277,7 @@ def _label_of(row, corrections):
     return None, None, "pendiente", 1
 
 
-def apply_local(conn, corrections=None):
+def apply_local(conn, corrections=None, *, commit=True):
     chosen = load_corrections() if corrections is None else corrections
     rows = conn.execute("SELECT * FROM movimientos").fetchall()
     for row in rows:
@@ -229,7 +300,8 @@ def apply_local(conn, corrections=None):
                WHERE hash=?""",
             (categoria, confianza, origen, revisar, row["hash"]),
         )
-    conn.commit()
+    if commit:
+        conn.commit()
 
 
 def save_labels(conn, rows):
@@ -237,7 +309,7 @@ def save_labels(conn, rows):
         origen = row.get("origen")
         if origen not in {"jev", "regla"}:
             continue
-        digest = movement_hash(row)
+        digest = row.get("hash") or movement_hash(row)
         conn.execute(
             """UPDATE movimientos
                SET categoria=?, confianza=?, origen_clasificacion=?, revisar=?
@@ -267,14 +339,29 @@ def ensure_ready(conn):
     return conn.execute("SELECT COUNT(*) AS n FROM movimientos").fetchone()["n"]
 
 
-def import_file(conn, path):
+def _coverage_bounds(desde, hasta):
+    if desde is None and hasta is None:
+        return None
+    if not desde or not hasta:
+        raise ValueError("Indica las dos fechas de cobertura: --desde y --hasta.")
+    try:
+        first, last = date.fromisoformat(desde), date.fromisoformat(hasta)
+    except ValueError as error:
+        raise ValueError("La cobertura debe tener fechas válidas AAAA-MM-DD.") from error
+    if first.isoformat() != desde or last.isoformat() != hasta or first > last:
+        raise ValueError("La cobertura debe tener fechas AAAA-MM-DD en orden.")
+    return desde, hasta
+
+
+def import_file(conn, path, *, desde=None, hasta=None, cuenta=""):
+    bounds = _coverage_bounds(desde, hasta)
     file = Path(path)
     digest = hashlib.sha256(file.read_bytes()).hexdigest()
-    if conn.execute("SELECT 1 FROM ficheros WHERE hash = ?", (digest,)).fetchone():
+    if not bounds and conn.execute("SELECT 1 FROM ficheros WHERE hash = ?", (digest,)).fetchone():
         return {"nombre": file.name, "estado": "ya cargado"}
     rows, ignored, lector = load_statement(file)
     breaks = balance_breaks(rows)
-    if not rows:
+    if not rows and not bounds:
         return {"nombre": file.name, "estado": "vacio", "lector": lector}
     if breaks:
         return {
@@ -284,24 +371,45 @@ def import_file(conn, path):
             "movimientos": len(rows),
             "saltos": breaks,
         }
-    inserted, updated = upsert_movements(conn, rows)
-    apply_local(conn)
-    conn.execute(
-        "INSERT INTO ficheros (hash, nombre, cargado, movimientos) VALUES (?,?,?,?)",
-        (digest, file.name, _now(), len(rows)),
-    )
-    conn.commit()
-    dates = sorted(row["fecha"] for row in rows)
+    dates = sorted(date.fromisoformat(row["fecha"]).isoformat() for row in rows)
+    if bounds and dates and (dates[0] < desde or dates[-1] > hasta):
+        raise ValueError("Hay movimientos fuera del intervalo de cobertura declarado.")
+    occurrences = {}
+    for row in rows:
+        row["cuenta"] = cuenta
+        row["extracto"] = digest
+        if row.get('divisa', 'EUR').strip().upper() != 'EUR':
+            raise ValueError('El panel solo admite extractos de cuentas en EUR.')
+        row['divisa'] = 'EUR'
+        key = movement_hash(row)
+        row["ocurrencia"] = occurrences.get(key, 0)
+        occurrences[key] = row["ocurrencia"] + 1
+    with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        existing = conn.execute("SELECT cuenta FROM ficheros WHERE hash = ?", (digest,)).fetchone()
+        if existing:
+            if bounds and existing['cuenta'] != cuenta:
+                raise ValueError("La cuenta de un extracto ya cargado no se puede cambiar aquí.")
+            inserted, updated = 0, 0
+        else:
+            inserted, updated = upsert_movements(conn, rows, commit=False)
+            apply_local(conn, commit=False)
+            conn.execute("INSERT INTO ficheros (hash, nombre, cargado, movimientos, cuenta) VALUES (?,?,?,?,?)",
+                         (digest, file.name, _now(), len(rows), cuenta))
+        if bounds:
+            conn.execute("""INSERT INTO cobertura_extractos VALUES (?,?,?,?)
+                          ON CONFLICT(fichero) DO UPDATE SET desde=excluded.desde, hasta=excluded.hasta""",
+                         (digest, cuenta, *bounds))
     return {
         "nombre": file.name,
-        "estado": "cargado",
+        "estado": "cobertura actualizada" if existing and bounds else "ya cargado" if existing else "cargado",
         "lector": lector,
         "movimientos": len(rows),
         "nuevos": inserted,
         "actualizados": updated,
         "ignoradas": len(ignored),
-        "desde": dates[0],
-        "hasta": dates[-1],
+        "desde": dates[0] if dates else desde,
+        "hasta": dates[-1] if dates else hasta,
     }
 
 
@@ -313,11 +421,110 @@ def scan_folder(conn, folder=None):
         for path in sorted(root.iterdir())
         if path.is_file() and path.suffix.casefold() in {".pdf", ".xlsx", ".xlsm", ".csv"}
     ]
-    return [import_file(conn, path) for path in files]
+    results = []
+    for path in files:
+        try:
+            results.append(import_file(conn, path))
+        except (ValueError, OSError) as error:
+            results.append({'nombre': path.name, 'estado': 'error', 'error': str(error)})
+    return results
 
 
 def _all(conn):
-    return [dict(row) for row in conn.execute("SELECT * FROM movimientos ORDER BY fecha, hash")]
+    rows = [dict(row) for row in conn.execute(
+        """SELECT m.*, t.aporte AS traspaso_myinvestor FROM movimientos m
+           LEFT JOIN traspasos_inversion t ON t.banco=m.hash AND t.estado='confirmado'
+                AND m.fecha=t.fecha_banco AND m.importe=t.importe_banco
+                AND m.divisa='EUR' AND m.direccion='gasto'
+           WHERE NOT EXISTS
+           (SELECT 1 FROM conciliacion c WHERE c.excluido=m.hash) ORDER BY fecha, hash""")]
+    for row in rows:
+        allowed = INGRESO if row['direccion'] == 'ingreso' else GASTO
+        if row['categoria_manual'] in allowed:
+            row.update(categoria=row['categoria_manual'], origen_clasificacion='manual', revisar=0, confianza=1.0)
+        if row['traspaso_myinvestor']:
+            row.update(categoria='ahorro_inversion', origen_clasificacion='traspaso', revisar=0, confianza=1.0)
+    return rows
+
+
+def set_manual_category(conn, digest, category):
+    with conn:
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute("SELECT direccion FROM movimientos WHERE hash=?", (digest,)).fetchone()
+        if row is None:
+            raise LookupError("Ese movimiento no existe.")
+        if conn.execute("SELECT 1 FROM traspasos_inversion WHERE banco=? AND estado='confirmado'", (digest,)).fetchone():
+            raise ValueError('Deshaz el enlace del traspaso antes de editar su categoría.')
+        allowed = INGRESO if row['direccion'] == 'ingreso' else GASTO
+        if category is not None and (not isinstance(category, str) or category not in allowed):
+            raise ValueError("La categoría no es válida para la dirección de este movimiento.")
+        conn.execute("UPDATE movimientos SET categoria_manual=? WHERE hash=?", (category, digest))
+
+
+def report_rows(conn):
+    return _all(conn)
+
+
+def _candidate(a, b):
+    feeds = {'pdf-texto', 'pdf-tabla', 'pdf-ocr', 'excel', 'csv'}
+    sources = {a['lector'], b['lector']}
+    cross_feed = ('enable-banking' in sources and bool(sources & feeds)) or (
+        sources <= feeds and (a['extracto'] or a['fichero']) != (b['extracto'] or b['fichero']))
+    return (a['hash'] != b['hash'] and cross_feed
+            and a['fecha'] == b['fecha'] and a['importe'] == b['importe'] and a['divisa'] == b['divisa']
+            and (not a['cuenta'] or not b['cuenta'] or a['cuenta'] == b['cuenta']))
+
+
+def duplicate_candidates(conn, mes='todos'):
+    rows = _selected(conn, mes)
+    groups = {}
+    decisions = {(r['primero'], r['segundo']): r['excluido'] for r in conn.execute('SELECT * FROM conciliacion')}
+    locked = {digest for pair, excluded in decisions.items() if excluded is not None for digest in pair}
+
+    def summary(row):
+        return {k: row[k] for k in ('hash', 'fecha', 'concepto', 'detalle', 'importe', 'divisa', 'lector', 'fichero', 'saldo')}
+
+    pairs = []
+    for row in rows:
+        if row['hash'] not in locked:
+            groups.setdefault((row['fecha'], row['importe'], row['divisa']), []).append(row)
+    for group in groups.values():
+        for index, a in enumerate(group):
+            for b in group[index + 1:]:
+                key = tuple(sorted((a['hash'], b['hash'])))
+                if key not in decisions and _candidate(a, b):
+                    pairs.append({'primero': summary(a), 'segundo': summary(b)})
+    history = []
+    if decisions:
+        records = {r['hash']: r for r in conn.execute('SELECT * FROM movimientos')}
+        for (a, b), excluded in decisions.items():
+            if mes == 'todos' or records[a]['fecha'].startswith(mes) or records[b]['fecha'].startswith(mes):
+                history.append({'primero': summary(records[a]), 'segundo': summary(records[b]), 'excluido': excluded})
+    return {'candidatos': pairs, 'decisiones': history}
+
+
+def reconcile(conn, first, second, action, excluded=None):
+    key = tuple(sorted((first, second)))
+    with conn:
+        conn.execute('BEGIN IMMEDIATE')
+        if action == 'deshacer':
+            conn.execute('DELETE FROM conciliacion WHERE primero=? AND segundo=?', key)
+            return
+        rows = conn.execute('SELECT * FROM movimientos WHERE hash IN (?,?)', key).fetchall()
+        if len(rows) != 2 or not _candidate(*rows):
+            raise ValueError('El par ya no es un candidato válido.')
+        if conn.execute("""SELECT 1 FROM conciliacion WHERE excluido IS NOT NULL
+                              AND (primero IN (?,?) OR segundo IN (?,?))""", (*key, *key)).fetchone():
+            raise ValueError('Uno de los movimientos ya está conciliado. Deshaz primero la decisión anterior.')
+        if action == 'duplicado' and excluded not in key:
+            raise ValueError('Elige cuál de las dos filas quieres excluir.')
+        if action == 'duplicado' and conn.execute("SELECT 1 FROM traspasos_inversion WHERE banco=? AND estado='confirmado'", (excluded,)).fetchone():
+            raise ValueError('El apunte está enlazado a una aportación. Deshaz ese enlace antes de excluirlo.')
+        if action not in {'distintos', 'duplicado'}:
+            raise ValueError('Decisión no válida.')
+        conn.execute("""INSERT INTO conciliacion VALUES (?,?,?,?)
+                        ON CONFLICT(primero, segundo) DO UPDATE SET excluido=excluded.excluido, decidido=excluded.decidido""",
+                     (*key, excluded if action == 'duplicado' else None, _now()))
 
 
 def _selected(conn, mes):
@@ -348,26 +555,61 @@ def _span(rows):
     return dates[0], dates[-1]
 
 
-def _complete(month, first, last):
-    if not first or not last:
-        return False
-    year, number = map(int, month.split("-"))
-    start = f"{month}-01"
-    end = f"{month}-{monthrange(year, number)[1]:02d}"
-    return first <= start and last >= end
-
-
-def _months(rows, first, last):
+def _months(conn, rows):
+    windows = {}
+    movements = {}
+    for row in rows:
+        movements.setdefault(row['fecha'][:7], []).append(row)
+    for row in conn.execute("SELECT cuenta, desde, hasta FROM cobertura_extractos ORDER BY desde"):
+        windows.setdefault(row['cuenta'], []).append((date.fromisoformat(row['desde']), date.fromisoformat(row['hasta'])))
+    accounts = set(windows) | {row['cuenta'] for row in rows}
+    month_keys = set(movements)
+    for intervals in windows.values():
+        for first, last in intervals:
+            cursor = first.replace(day=1)
+            while cursor <= last:
+                month_keys.add(cursor.isoformat()[:7])
+                end = cursor.replace(day=monthrange(cursor.year, cursor.month)[1])
+                if end >= last:
+                    break
+                cursor = end + timedelta(days=1)
+    if month_keys:
+        cursor = date.fromisoformat(min(month_keys) + '-01')
+        last_month = date.fromisoformat(max(month_keys) + '-01')
+        while cursor < last_month:
+            month_keys.add(cursor.isoformat()[:7])
+            cursor = cursor.replace(day=monthrange(cursor.year, cursor.month)[1]) + timedelta(days=1)
     found = []
-    for month in sorted({row["fecha"][:7] for row in rows}):
-        in_month = [row for row in rows if row["fecha"].startswith(month)]
-        start, end = _span(in_month)
+    for month in sorted(month_keys):
+        year, number = map(int, month.split('-'))
+        start = date(year, number, 1)
+        end = date(year, number, monthrange(year, number)[1])
+        complete = set()
+        has_interval = False
+        for account, intervals in windows.items():
+            cursor = start.toordinal()
+            for first, last in intervals:
+                if first > end:
+                    break
+                if last < start:
+                    continue
+                has_interval = True
+                if first.toordinal() > cursor:
+                    break
+                cursor = max(cursor, last.toordinal() + 1)
+                if cursor > end.toordinal():
+                    complete.add(account)
+                    break
+        status = 'completa' if complete == accounts else 'parcial' if has_interval else 'desconocida'
+        seen_first, seen_last = _span(movements.get(month, []))
         found.append(
             {
                 "mes": month,
-                "completo": _complete(month, first, last),
-                "desde": start,
-                "hasta": end,
+                "completo": status == 'completa',
+                "cobertura": status,
+                "desde": seen_first,
+                "hasta": seen_last,
+                "movimientos": len(movements.get(month, [])),
             }
         )
     return found
@@ -381,7 +623,11 @@ def mes_largo(month):
 def meses(conn):
     rows = _all(conn)
     first, last = _span(rows)
-    return {"meses": _months(rows, first, last), "desde": first, "hasta": last}
+    sources = [dict(row) for row in conn.execute("""
+        SELECT f.nombre, c.desde, c.hasta FROM ficheros f
+        LEFT JOIN cobertura_extractos c ON f.hash=c.fichero ORDER BY c.desde DESC, f.nombre
+    """)]
+    return {"meses": _months(conn, rows), "desde": first, "hasta": last, "extractos": sources}
 
 
 def _totals(rows):
@@ -411,15 +657,16 @@ def _totals(rows):
 
 def evolucion(conn):
     rows = _all(conn)
-    first, last = _span(rows)
     series = []
-    for month in _months(rows, first, last):
+    for month in _months(conn, rows):
         chosen = [row for row in rows if row["fecha"].startswith(month["mes"])]
         boxes, _pending = _totals(chosen)
         series.append(
             {
                 "mes": month["mes"],
                 "completo": month["completo"],
+                "cobertura": month["cobertura"],
+                "sin_datos": not month["movimientos"] and not month["completo"],
                 "ingresos": money(boxes["ingreso"]),
                 "consumo": money(-boxes["consumo"]),
                 "ahorro": money(-boxes["ahorro"]),
@@ -446,10 +693,9 @@ def _percent(current, previous):
 
 def kpis(conn, mes="todos"):
     rows = _all(conn)
-    first, last = _span(rows)
     chosen = rows if not mes or mes == "todos" else [row for row in rows if row["fecha"].startswith(mes)]
     boxes, pending = _totals(chosen)
-    info = _months(rows, first, last)
+    info = _months(conn, rows)
     by_month = {item["mes"]: item for item in info}
     complete_months = [item["mes"] for item in info if item["completo"]]
     medio = None
@@ -464,23 +710,29 @@ def kpis(conn, mes="todos"):
     variacion = None
     if mes and mes != "todos" and mes in by_month:
         previous = _previous(mes)
-        if previous in by_month:
+        if previous in by_month and by_month[mes]["completo"] and by_month[previous]["completo"]:
             current_spend = -boxes["consumo"]
             previous_rows = [row for row in rows if row["fecha"].startswith(previous)]
             previous_spend = -_totals(previous_rows)[0]["consumo"]
             variacion = _percent(current_spend, previous_spend)
-    period_complete = bool(chosen) and all(
-        by_month[row["fecha"][:7]]["completo"] for row in chosen if row["fecha"][:7] in by_month
-    )
+    status = by_month.get(mes, {}).get('cobertura', 'desconocida')
+    if not mes or mes == 'todos':
+        covered = sum((item['cobertura'] != 'desconocida' for item in info))
+        status = ('completa' if info and len(complete_months) == len(info)
+                  else 'parcial' if covered else 'desconocida')
     start, end = _span(chosen)
+    traspasos = [Decimal(row['importe']) for row in chosen if row['traspaso_myinvestor']]
     return {
         "mes": mes or "todos",
-        "completo": period_complete if mes and mes != "todos" else bool(complete_months) and len(complete_months) == len(info) and bool(info),
+        "completo": status == 'completa',
+        "cobertura": status,
         "desde": start,
         "hasta": end,
         "ingresos": money(boxes["ingreso"]),
         "consumo": money(-boxes["consumo"]),
         "ahorro": money(-boxes["ahorro"]),
+        "traspasos_myinvestor": money(-sum(traspasos, Decimal('0'))),
+        "traspasos_myinvestor_n": len(traspasos),
         "bizum_personas": money(-boxes["bizum_personas"]),
         "sin_clasificar": money(boxes["sin_clasificar"]),
         "sin_clasificar_n": pending,
@@ -488,6 +740,7 @@ def kpis(conn, mes="todos"):
         "variacion_consumo": variacion,
         "consumo_medio_meses_completos": medio,
         "movimientos": len(chosen),
+        "revisar_n": sum(bool(row["revisar"]) for row in chosen),
     }
 
 
@@ -545,19 +798,76 @@ def list_movimientos(conn, mes="todos", categoria=None, limit=50):
     return output
 
 
+def _search_text(value):
+    return "".join(
+        char for char in unicodedata.normalize("NFD", str(value).casefold())
+        if not unicodedata.combining(char)
+    )
+
+
+def query_movimientos(conn, mes="todos", *, categoria="", texto="", direccion="",
+                      origen="", revisar=False, orden="fecha", sentido="desc",
+                      limit=50, offset=0):
+    """Filtra y ordena el periodo completo antes de paginar; suma con Decimal."""
+    period = _selected(conn, mes)
+    needle = _search_text(texto.strip())
+    chosen = []
+    for row in period:
+        category = row.get("categoria") or "sin_clasificar"
+        if categoria and category != categoria:
+            continue
+        if direccion and row["direccion"] != direccion:
+            continue
+        if origen and row["origen_clasificacion"] != origen:
+            continue
+        if revisar and not row["revisar"]:
+            continue
+        if needle and needle not in _search_text(
+            f"{row['concepto']} {row['detalle']} {etiquetar(category)}"
+        ):
+            continue
+        chosen.append({
+            "hash": row["hash"], "fecha": row["fecha"], "concepto": row["concepto"],
+            "detalle": row["detalle"], "importe": row["importe"],
+            "categoria": category, "etiqueta": etiquetar(category),
+            "origen": row["origen_clasificacion"], "revisar": bool(row["revisar"]),
+            "direccion": row["direccion"], "categoria_manual": row["categoria_manual"],
+            "traspaso_myinvestor": bool(row['traspaso_myinvestor']),
+        })
+
+    def sort_key(row):
+        value = Decimal(row[orden]) if orden == "importe" else _search_text(row[orden])
+        return value, row["fecha"], row["hash"]
+
+    chosen.sort(key=sort_key, reverse=sentido == "desc")
+    total = len(chosen)
+    amounts = [Decimal(row["importe"]) for row in chosen]
+    ingresos = sum((n for n in amounts if n > 0), Decimal("0"))
+    salidas = -sum((n for n in amounts if n < 0), Decimal("0"))
+    if limit is not None:
+        offset = min(offset, ((total - 1) // limit) * limit) if total else 0
+        page = chosen[offset:offset + limit]
+    else:
+        offset, page = 0, chosen
+    return {
+        "movimientos": page, "total": total, "total_periodo": len(period),
+        "limit": limit, "offset": offset,
+        "resumen": {"ingresos": money(ingresos), "salidas": money(salidas),
+                    "neto": money(ingresos - salidas)},
+    }
+
+
 def insights(conn, mes="todos"):
     rows = _all(conn)
     if not rows:
         return {"frases": ["Todavía no hay movimientos en la base de datos."]}
-    first, last = _span(rows)
-    info = _months(rows, first, last)
+    info = _months(conn, rows)
     by_month = {item["mes"]: item for item in info}
     chosen = rows if not mes or mes == "todos" else [row for row in rows if row["fecha"].startswith(mes)]
     frases = []
     if mes and mes != "todos" and mes in by_month and not by_month[mes]["completo"]:
-        item = by_month[mes]
         frases.append(
-            f"{mes_largo(mes).capitalize()} no está completo: hay movimientos del {item['desde']} al {item['hasta']}."
+            f"{mes_largo(mes).capitalize()}: cobertura {by_month[mes]['cobertura']}."
         )
     cats = categorias(conn, mes)["consumo"]
     if cats:
@@ -584,10 +894,10 @@ def insights(conn, mes="todos"):
         )
     if not mes or mes == "todos":
         series = evolucion(conn)
-        if len(series) >= 2:
-            top_month = max(series, key=lambda item: Decimal(item["consumo"]))
-            frases.append(f"El mes con más consumo es {mes_largo(top_month['mes'])}.")
         complete = [item for item in series if item["completo"]]
+        if len(complete) >= 2:
+            top_month = max(complete, key=lambda item: Decimal(item["consumo"]))
+            frases.append(f"Entre los meses completos, el de más consumo es {mes_largo(top_month['mes'])}.")
         if complete:
             average = sum((Decimal(item["consumo"]) for item in complete), Decimal("0")) / len(complete)
             frases.append(
@@ -595,16 +905,19 @@ def insights(conn, mes="todos"):
             )
     elif mes in by_month:
         previous = _previous(mes)
-        if previous in by_month:
+        if previous in by_month and by_month[mes]["completo"] and by_month[previous]["completo"]:
             current = Decimal(kpis(conn, mes)["consumo"])
             before = Decimal(kpis(conn, previous)["consumo"])
             change = _percent(current, before)
             if change is not None:
-                direction = "sube" if Decimal(change) > 0 else "baja"
-                points = format(abs(Decimal(change)), "f").replace(".", ",")
-                frases.append(
-                    f"El consumo de {mes_largo(mes)} {direction} un {points} % respecto a {mes_largo(previous)}."
-                )
+                if Decimal(change) == 0:
+                    frases.append(f"El consumo de {mes_largo(mes)} se mantiene respecto a {mes_largo(previous)}.")
+                else:
+                    direction = "sube" if Decimal(change) > 0 else "baja"
+                    points = format(abs(Decimal(change)), "f").replace(".", ",")
+                    frases.append(
+                        f"El consumo de {mes_largo(mes)} {direction} un {points} % respecto a {mes_largo(previous)}."
+                    )
     if chosen:
         biggest = max(chosen, key=lambda row: abs(Decimal(row["importe"])))
         frases.append(
@@ -615,16 +928,12 @@ def insights(conn, mes="todos"):
 
 
 def estado(conn):
-    row = conn.execute(
-        "SELECT COUNT(*) AS n, MIN(fecha) AS desde, MAX(fecha) AS hasta FROM movimientos"
-    ).fetchone()
-    pending = conn.execute(
-        "SELECT COUNT(*) AS n FROM movimientos WHERE origen_clasificacion = 'pendiente'"
-    ).fetchone()["n"]
+    rows = _all(conn)
+    first, last = _span(rows)
     return {
-        "movimientos": row["n"],
-        "pendientes": pending,
-        "desde": row["desde"],
-        "hasta": row["hasta"],
+        "movimientos": len(rows),
+        "pendientes": sum(row['origen_clasificacion'] == 'pendiente' for row in rows),
+        "desde": first,
+        "hasta": last,
         "base": "data/gastos.sqlite",
     }

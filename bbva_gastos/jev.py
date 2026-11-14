@@ -107,7 +107,7 @@ def _ask(api_key, movements):
     return labels, usage
 
 
-def classify(movements, api_key):
+def classify(movements, api_key, *, refresh=False):
     cache = _load_cache()
     output = [None] * len(movements)
     pending = []
@@ -117,7 +117,7 @@ def classify(movements, api_key):
             output[index] = {**movement, **_label(rule, 1, "regla")}
             continue
         key = cache_key(movement)
-        cached = cache.get(key)
+        cached = None if refresh else cache.get(key)
         if cached:
             output[index] = {**movement, **cached}
             continue

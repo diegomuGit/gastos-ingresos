@@ -18,9 +18,9 @@ def parse_amount(value):
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, Decimal):
-        return value
+        return value if value.is_finite() else None
     if isinstance(value, (int, float)):
-        return Decimal(str(value))
+        return parse_amount(Decimal(str(value)))
     text = str(value).strip()
     if not text or text in {"-", "—"}:
         return None
@@ -42,12 +42,12 @@ def parse_amount(value):
         amount = Decimal(text)
     except Exception:
         return None
-    return -amount if negative else amount
+    return (-amount if negative else amount) if amount.is_finite() else None
 
 
 def parse_date(text):
     day, month, year = text.split("/")
-    return f"{year}-{month}-{day}"
+    return date(int(year), int(month), int(day)).isoformat()
 
 
 def parse_bbva_text(text):
@@ -137,10 +137,9 @@ def parse_date_value(value):
     if re.fullmatch(r"\d{2}/\d{2}/\d{4}", text):
         return parse_date(text)
     if re.fullmatch(r"\d{2}-\d{2}-\d{4}", text):
-        day, month, year = text.split("-")
-        return f"{year}-{month}-{day}"
+        return parse_date(text.replace("-", "/"))
     if len(text) >= 10 and re.fullmatch(r"\d{4}-\d{2}-\d{2}", text[:10]):
-        return text[:10]
+        return date.fromisoformat(text[:10]).isoformat()
     return ""
 
 
@@ -165,7 +164,7 @@ def row_from_cells(cells, mapping):
         abono = parse_amount(_cell(cells, mapping, "abono")) or Decimal("0")
         cargo = parse_amount(_cell(cells, mapping, "cargo")) or Decimal("0")
         if abono == 0 and cargo == 0:
-            return None
+            raise ValueError(f"Importe ausente o inválido en un movimiento del {fecha}.")
         importe = abono - abs(cargo)
     saldo = parse_amount(_cell(cells, mapping, "saldo"))
     fecha_valor = parse_date_value(_cell(cells, mapping, "fecha_valor"))
@@ -252,13 +251,17 @@ def parse_xlsx(path):
 
     book = openpyxl.load_workbook(path, read_only=True, data_only=True)
     best = []
-    for sheet in book.worksheets:
-        matrix = [list(row) for row in sheet.iter_rows(values_only=True)]
-        parsed = rows_from_matrix(matrix)
-        if len(parsed) > len(best):
-            best = parsed
-    book.close()
-    if not best:
+    recognized = False
+    try:
+        for sheet in book.worksheets:
+            matrix = [list(row) for row in sheet.iter_rows(values_only=True)]
+            recognized |= any(map_header(row) is not None for row in matrix[:40])
+            parsed = rows_from_matrix(matrix)
+            if len(parsed) > len(best):
+                best = parsed
+    finally:
+        book.close()
+    if not best and not recognized:
         raise ValueError(
             "No encuentro movimientos en el Excel. "
             "Hace falta una fila con fecha, concepto e importe, o cargo y abono."
@@ -284,8 +287,9 @@ def _read_csv_matrix(path):
 
 
 def parse_csv(path):
-    rows = rows_from_matrix(_read_csv_matrix(path))
-    if not rows:
+    matrix = _read_csv_matrix(path)
+    rows = rows_from_matrix(matrix)
+    if not rows and not any(map_header(row) for row in matrix[:40]):
         raise ValueError("No encuentro movimientos en el CSV.")
     return rows, [], "csv"
 
@@ -308,11 +312,11 @@ def load_statement(path):
 
 
 def balance_breaks(rows):
-    breaks = 0
-    for newer, older in zip(rows, rows[1:]):
-        if not newer.get("saldo") or not older.get("saldo"):
-            continue
-        expected = Decimal(older["saldo"]) + Decimal(newer["importe"])
-        if expected != Decimal(newer["saldo"]):
-            breaks += 1
-    return breaks
+    def gaps(ordered):
+        return sum(Decimal(older['saldo']) + Decimal(newer['importe']) != Decimal(newer['saldo'])
+                   for newer, older in zip(ordered, ordered[1:]) if newer.get('saldo') and older.get('saldo'))
+
+    dates = [row['fecha'] for row in rows]
+    if len(set(dates)) <= 1:
+        return min(gaps(rows), gaps(rows[::-1]))
+    return gaps(rows[::-1] if dates[0] < dates[-1] else rows)

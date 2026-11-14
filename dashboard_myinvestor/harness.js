@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 /**
- * Arnés de preview y pruebas: ejecuta computeDashboard_ de Code.gs (la parte de cálculo puro, sin Google) con los CSV
- * de data/ (export real de la hoja; copia en tests/fixtures/) y genera data/mock.json, que es lo que pinta preview.html.
+ * Exporta el resultado de computeDashboard_ a partir de los CSV de las pestañas, sin conectar con Google.
  *
  *   node harness.js                                   -> data/mock.json + resumen por consola
  *   node harness.js --now 2026-10-29T23:30:00+01:00   -> fija el «ahora» (antigüedad de los datos reproducible)
- *   node harness.js --data tests/fixtures             -> lee los CSV de otra carpeta
+ *   node harness.js --data otra-carpeta               -> lee los CSV de otra carpeta
  *   node harness.js --sin Crypto,Crypto_Movs,Flujos --out data/mock_sin_pestanas.json
  *   node harness.js --fechas serial|iso|date -> cómo llegan las fechas (número de serie, texto ISO u objeto Date)
  *
@@ -18,7 +17,6 @@ const fs = require('fs'), path = require('path'), vm = require('vm');
 
 const TABS = ['Historico', 'Stocks y Fondos', 'Stocks', 'Fondos', 'Fondos_Ref', 'Targets', 'Flujos', 'Crypto', 'Crypto_Movs'];
 const DATE_COLS = ['fecha', 'nav_date', 'actualizado'];
-const SHEET_URL = 'https://docs.google.com/spreadsheets/d/TU_SPREADSHEET_ID/edit';
 
 function parseCSV(t) {
   const rows = []; let row = [], f = '', q = false;
@@ -87,19 +85,28 @@ function loadCode(file) {
 function compute(tabs, opts) {
   const ctx = loadCode();
   const out = ctx.computeDashboard_(tabs, Object.assign({ tz: 'Europe/Madrid', now: new Date() }, opts || {}));
-  const plain = JSON.parse(JSON.stringify(out));
-  plain.spreadsheetUrl = SHEET_URL;
-  return plain;
+  return JSON.parse(JSON.stringify(out));
 }
 
-module.exports = { TABS, parseCSV, typed, loadTab, loadTabs, loadCode, compute, SHEET_URL };
+module.exports = { TABS, parseCSV, typed, loadTab, loadTabs, loadCode, compute };
 
 if (require.main === module) {
   const a = process.argv.slice(2), arg = k => { const i = a.indexOf(k); return i >= 0 ? a[i + 1] : null; };
   const tabs = loadTabs({ dir: arg('--data') || undefined, sin: (arg('--sin') || '').split(',').filter(Boolean), fechas: arg('--fechas') || 'date' });
+  if (!Object.keys(tabs).length) {
+    console.error('No se encontraron CSV de MyInvestor. Indica su carpeta con --data.');
+    process.exit(1);
+  }
   const out = compute(tabs, { now: arg('--now') ? new Date(arg('--now')) : new Date() });
   const file = arg('--out') || path.join(__dirname, 'data', 'mock.json');
-  fs.writeFileSync(file, JSON.stringify(out, null, 1));
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const temp = file + '.' + process.pid + '.tmp';
+  try {
+    fs.writeFileSync(temp, JSON.stringify(out, null, 1), { flag: 'wx' });
+    fs.renameSync(temp, file);
+  } finally {
+    if (fs.existsSync(temp)) fs.unlinkSync(temp);
+  }
   const e = v => v === null || v === undefined ? 'n/d' : v.toFixed(2);
   const p = v => v === null || v === undefined ? 'n/d' : (v * 100).toFixed(2) + '%';
   console.log('Pestañas cargadas:', Object.keys(tabs).join(', ') || '(ninguna)');

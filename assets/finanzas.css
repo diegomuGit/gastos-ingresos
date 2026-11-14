@@ -1,0 +1,22 @@
+.suite-nav {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  padding: 10px 16px;
+  margin: 0 auto 16px;
+  max-width: 1280px;
+  font: 600 14px/1.4 system-ui, sans-serif;
+  background: var(--surface, var(--bbva-surface, #fff));
+  color: var(--ink, var(--bbva-text, #10213e));
+  border: 1px solid var(--border, var(--bbva-border, #dce3ed));
+  border-radius: 12px;
+}
+.suite-nav a {
+  color: inherit;
+  padding: 8px 12px;
+  border-radius: 8px;
+  text-decoration: none;
+}
+.suite-nav a:hover { text-decoration: underline; }
+.suite-nav a[aria-current="page"] { color: white; background: #194a8a; }

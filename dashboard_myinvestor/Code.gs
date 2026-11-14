@@ -41,12 +41,6 @@ var TAB_ALIASES = {
 var DEFAULT_TARGETS = { cash: 0.05, rv: 0.80, rf: 0.15 };
 var DEFAULT_BENCHMARK = 'MSCI World';
 
-/**
- * Respaldo de la cripto: SOLO se usa si ni la pestaña Crypto (Coste_EUR) ni Crypto_Movs dan el dato.
- * El dashboard indica siempre de dónde sale el coste (hoja, Crypto_Movs o este valor fijo).
- */
-var CRYPTO_FALLBACK = { costeEur: 1493.35, btcSinCoste: 0.004 };
-
 // Geografía de acciones sueltas (la de los fondos sale de Fondos_Ref)
 var STOCK_GEO = { GOOG: 'USA', GOOGL: 'USA', MA: 'USA', ASML: 'EU' };
 var MARKET_GEO = { NDQ: 'USA', NASDAQ: 'USA', NYS: 'USA', NYSE: 'USA', ARCA: 'USA',
@@ -233,6 +227,7 @@ function computeDashboard_(tabs, opts) {
 
   // ---------- Flujos de MyInvestor (Flujos + columna de aportaciones de Historico, sin duplicar) ----------
   var miFlows = mergeFlows_(F.flows, history, H.hasAport);
+  var aportacionesBBVA = catalogoAportaciones_(miFlows);
   var flowsKnown = F.found || H.hasAport;
 
   // ---------- Cadenas de rentabilidad (TWR) ----------
@@ -317,9 +312,11 @@ function computeDashboard_(tabs, opts) {
       last: lastChange_(totalChain)
     },
     series: series,
+    flujosPatrimonio: wealthFlows_(miChain, flowsKnown, crChain, crDays, crFlows),
     perf: { asOf: asOf, periods: periods, index: index, bench: benchRanges_(index, ranges, bench.info.available), notes: perfNotes, flowsKnown: flowsKnown },
     benchmark: bench.info,
     mi: mi,
+    conciliacionBBVA: { version: 1, aportaciones: aportacionesBBVA },
     crypto: crypto,
     daily: daily,
     status: status,
@@ -545,6 +542,26 @@ function mergeFlows_(flujos, history, hasAport) {
   return out.sort(byDate_);
 }
 
+/** Catálogo completo de los flujos positivos que usa el cálculo, no de la tabla recortada. */
+function catalogoAportaciones_(flows) {
+  var groups = Object.create(null), aportaciones = [];
+  flows.forEach(function (f) {
+    var cents = Math.round(f.importe * 100);
+    if (cents <= 0 || !Number.isSafeInteger(cents)) return;
+    var key = JSON.stringify([f.date, cents, f.origen, f.nota]);
+    (groups[key] || (groups[key] = [])).push(f);
+  });
+  Object.keys(groups).forEach(function (key) {
+    groups[key].forEach(function (f, index, group) {
+      // Si cambia el número de filas indistinguibles no se reasigna un enlace antiguo.
+      f.claveBBVA = JSON.stringify([key, group.length, index]);
+      aportaciones.push({ clave: f.claveBBVA, fecha: f.date, centimos: Math.round(f.importe * 100),
+        origen: f.origen, nota: f.nota });
+    });
+  });
+  return aportaciones;
+}
+
 /** Crypto: un punto por día (suma de activos/plataformas; por activo+plataforma gana broker o la última fila). */
 function readCrypto_(tab, warnings, status) {
   var out = { available: false, reason: '', days: [] };
@@ -719,7 +736,7 @@ function cryptoFlows_(days, movs, activo) {
       var px2 = assetAgg_(cur, activo).precio;
       inWin.forEach(function (m) {
         var eur2 = m.total !== null ? m.total : (px2 !== null ? Math.abs(m.neto) * px2 : 0);
-        flows.push({ date: m.date, eff: cur.date, amount: (m.neto >= 0 ? 1 : -1) * eur2, origen: 'Crypto_Movs' });
+        flows.push({ date: m.date, eff: cur.date, amount: (m.neto >= 0 ? 1 : -1) * eur2, origen: 'Crypto_Movs', estimado: m.total === null });
       });
     } else if (Math.abs(eurMain) > 0.005) {
       flows.push({ date: cur.date, eff: cur.date, amount: eurMain, origen: 'deducido' });
@@ -727,6 +744,27 @@ function cryptoFlows_(days, movs, activo) {
     flows = flows.concat(inferred.filter(function (f) { return Math.abs(f.amount) > 0.005; }));
   }
   return flows;
+}
+
+/** Flujos utilizados por el cálculo de mercado, agrupados por fecha de valoración. */
+function wealthFlows_(miChain, flowsKnown, crChain, crDays, crFlows) {
+  var estimated = {};
+  crFlows.forEach(function (flow) {
+    if (flow.origen === 'deducido' || flow.estimado) estimated[flow.eff || flow.date] = true;
+  });
+  var missingQuantity = crDays.map(function (day) {
+    return day.items.some(function (item) { return item.cantidad === null; });
+  });
+  return {
+    version: 1,
+    myinvestor: flowsKnown ? miChain.map(function (point) {
+      return { fecha: point.date, neto: point.flow };
+    }) : null,
+    cripto: crChain.map(function (point, i) {
+      var unknown = i > 0 && (missingQuantity[i - 1] || missingQuantity[i]);
+      return { fecha: point.date, neto: unknown ? null : point.flow, estimado: Boolean(estimated[point.date]) };
+    })
+  };
 }
 
 function buildCrypto_(C, movs, activo, chain, flows) {
@@ -744,20 +782,20 @@ function buildCrypto_(C, movs, activo, chain, flows) {
     movOut.precioVsMedio = movs.precioMedio ? agg.precio / movs.precioMedio - 1 : null;
   }
 
-  // Coste: 1) hoja Crypto (último Coste_EUR)  2) Crypto_Movs  3) valor fijo de respaldo
+  // Coste: valoración del día o historial de compras; desconocido si faltan ambos.
   var coste = null, costeOrigen = null, costeFecha = null;
-  for (var i = days.length - 1; i >= 0 && coste === null; i--) if (days[i].coste !== null) { coste = days[i].coste; costeFecha = days[i].date; costeOrigen = 'hoja'; }
-  if (coste === null && movs.available && movs.coste > 0) { coste = movs.coste; costeOrigen = 'movs'; costeFecha = movs.last; }
-  if (coste === null && CRYPTO_FALLBACK.costeEur) { coste = CRYPTO_FALLBACK.costeEur; costeOrigen = 'fijo'; }
+  var registro = movsAt_(movs, last.date);
+  if (last.coste !== null) { coste = last.coste; costeFecha = last.date; costeOrigen = 'hoja'; }
+  else if (registro && registro.qty > 0) { coste = registro.cost; costeFecha = registro.date; costeOrigen = 'movs'; }
   var plus = coste !== null ? last.valor - coste : null;
 
   // BTC sin coste registrado -> la plusvalía latente queda sobreestimada
   var sinCoste = null;
   if (agg.cantidad !== null) {
-    if (movs.available && movs.btcConCoste > 0) {
-      var sc = agg.cantidad - movs.btcConCoste;
+    if (registro && registro.qty > 0) {
+      var sc = agg.cantidad - registro.qty;
       sinCoste = { btc: sc > 1e-7 ? sc : 0, origen: 'movs' };
-    } else if (CRYPTO_FALLBACK.btcSinCoste) sinCoste = { btc: Math.min(CRYPTO_FALLBACK.btcSinCoste, agg.cantidad), origen: 'fijo' };
+    }
   }
   var conCoste = null;
   if (sinCoste && sinCoste.btc > 0 && agg.precio !== null && coste !== null) {
@@ -767,13 +805,10 @@ function buildCrypto_(C, movs, activo, chain, flows) {
       plusvaliaPct: coste ? (q * agg.precio - coste) / coste : null };
   }
 
-  // Serie diaria: valor, precio y coste (hoja -> Crypto_Movs a esa fecha -> último conocido -> respaldo)
-  var lastCost = null;
+  // Serie diaria: coste declarado para esa valoración o historial de movimientos hasta esa fecha.
   var series = days.map(function (d) {
     var a = assetAgg_(d, activo), c = d.coste;
-    if (c === null && movs.available) { var m = movsAt_(movs, d.date); if (m && m.cost > 0) c = m.cost; }
-    if (c === null) c = lastCost !== null ? lastCost : (costeOrigen === 'fijo' ? coste : null);
-    lastCost = c;
+    if (c === null && movs.available) { var m = movsAt_(movs, d.date); if (m && m.qty > 0) c = m.cost; }
     return { d: d.date, valor: d.valor, precio: a.precio, cantidad: a.cantidad, coste: c, plus: c !== null ? d.valor - c : null, src: d.source };
   });
 

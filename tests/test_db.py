@@ -82,7 +82,7 @@ def test_evolucion_and_kpis_come_from_the_database():
     conn.close()
 
 
-def test_edge_months_are_incomplete_and_the_middle_is_not():
+def test_legacy_movements_do_not_prove_coverage_of_middle_months():
     conn = _db("meses.sqlite")
     upsert_movements(
         conn,
@@ -93,10 +93,9 @@ def test_edge_months_are_incomplete_and_the_middle_is_not():
         ],
     )
     apply_local(conn)
-    found = {item["mes"]: item["completo"] for item in meses(conn)["meses"]}
-    assert found["2025-12"] is False
-    assert found["2026-06"] is True
-    assert found["2026-11"] is False
+    found = {item["mes"]: item["cobertura"] for item in meses(conn)["meses"]}
+    assert len(found) == 12
+    assert set(found.values()) == {'desconocida'}
     conn.close()
 
 
@@ -158,12 +157,14 @@ def test_bizum_between_people_is_not_spending():
 
 def test_dashboard_html_asks_the_api_and_has_no_statement_amounts():
     html = WEB.read_text(encoding="utf-8")
-    assert "fetch(" in html
-    assert "/api/lectura" in html
+    script = WEB.with_name("app.js").read_text(encoding="utf-8")
+    assert 'src="/app.js"' in html
+    assert "fetch(" in script
+    assert "/api/lectura" in script
     assert 'data-sort="fecha"' in html
     assert 'data-sort="importe"' in html
-    assert "innerHTML" not in html
-    assert re.search(r"\d[\d.]*,\d{2}", html) is None
+    assert "innerHTML" not in html + script
+    assert re.search(r"\d[\d.]*,\d{2}", html + script) is None
 
 
 def test_http_kpis_follow_the_database():
@@ -194,7 +195,7 @@ def test_http_kpis_follow_the_database():
         assert Decimal(body["ingresos"]) == Decimal("100.00")
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5) as response:
             html = response.read().decode("utf-8")
-        assert "fetch(" in html
+        assert 'src="/app.js"' in html
         assert "100.00" not in html
     finally:
         if httpd is not None:
