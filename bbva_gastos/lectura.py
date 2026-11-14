@@ -8,7 +8,7 @@ from decimal import Decimal
 
 import requests
 
-from bbva_gastos.db import categorias, evolucion, kpis, list_movimientos, money
+from bbva_gastos.db import categorias, evolucion, kpis, money
 from bbva_gastos.jev import load_api_key
 
 CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
@@ -17,20 +17,6 @@ MODEL = "google/gemini-2.5-flash-lite"
 
 class LecturaError(RuntimeError):
     pass
-
-
-def ensure_table(conn):
-    conn.execute(
-        """
-        CREATE TABLE IF NOT EXISTS lecturas (
-            clave TEXT PRIMARY KEY,
-            mes TEXT NOT NULL,
-            modelo TEXT NOT NULL,
-            parrafos TEXT NOT NULL,
-            creado TEXT NOT NULL
-        )
-        """
-    )
 
 
 def hechos(conn, mes="todos"):
@@ -43,7 +29,6 @@ def hechos(conn, mes="todos"):
     if periodo != "todos":
         serie = [item for item in serie if item["mes"] == periodo]
     grupos = categorias(conn, periodo)
-    mayores = list_movimientos(conn, periodo, None, 12)
     return {
         "periodo": periodo,
         "kpis": kpis(conn, periodo),
@@ -51,26 +36,17 @@ def hechos(conn, mes="todos"):
         "consumo": grupos["consumo"][:8],
         "ingresos": grupos["ingresos"],
         "aparte": grupos["aparte"],
-        "movimientos_mayores": [
-            {
-                "fecha": row["fecha"],
-                "concepto": row["concepto"],
-                "detalle": row["detalle"],
-                "importe": row["importe"],
-                "categoria": row["etiqueta"],
-            }
-            for row in mayores
-        ],
         "notas": [
             "El consumo no incluye ahorro e inversión ni Bizum a personas.",
             "Los movimientos sin categoría no entran en el consumo.",
-            "Un mes incompleto no cubre desde el día 1 hasta el último día.",
+            "La cobertura se declara por extracto; si es desconocida no se puede concluir que el mes esté completo.",
+            "No compares el consumo de un mes incompleto con el de un mes completo.",
         ],
     }
 
 
 def clave_de(datos):
-    raw = json.dumps({"v": 2, "datos": datos}, ensure_ascii=False, sort_keys=True)
+    raw = json.dumps({"v": 3, "datos": datos}, ensure_ascii=False, sort_keys=True)
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
@@ -226,7 +202,6 @@ def _completar(api_key, datos, reintento):
 
 
 def _cache(conn, clave):
-    ensure_table(conn)
     row = conn.execute(
         "SELECT parrafos, modelo, creado FROM lecturas WHERE clave = ?",
         (clave,),
@@ -251,6 +226,8 @@ def obtener(conn, mes="todos"):
 
 def generar(conn, mes="todos", forzar=False):
     datos = hechos(conn, mes)
+    if not datos["kpis"]["movimientos"]:
+        raise LecturaError("Carga movimientos de este periodo antes de generar una lectura.")
     clave = clave_de(datos)
     if not forzar:
         cached = _cache(conn, clave)
@@ -260,9 +237,11 @@ def generar(conn, mes="todos", forzar=False):
         api_key = load_api_key()
     except SystemExit as error:
         raise LecturaError(str(error)) from error
-    parrafos = _pedir(api_key, datos)
+    try:
+        parrafos = _pedir(api_key, datos)
+    except requests.RequestException as error:
+        raise LecturaError("No se pudo conectar con OpenRouter. Inténtalo de nuevo.") from error
     creado = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    ensure_table(conn)
     conn.execute(
         "INSERT OR REPLACE INTO lecturas (clave, mes, modelo, parrafos, creado) VALUES (?,?,?,?,?)",
         (clave, mes or "todos", MODEL, json.dumps(parrafos, ensure_ascii=False), creado),

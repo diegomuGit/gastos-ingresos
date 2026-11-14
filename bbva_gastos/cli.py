@@ -26,11 +26,11 @@ from bbva_gastos.client import (
     transactions,
 )
 from bbva_gastos.db import (
-    apply_local,
     connect,
     ensure_ready,
     estado,
     import_file,
+    report_rows,
     save_labels,
     scan_folder,
     upsert_movements,
@@ -39,9 +39,8 @@ from bbva_gastos.jev import JevError, classify, load_api_key
 from bbva_gastos.normalize import normalize_transaction, pick_aspsp, to_canonical
 from bbva_gastos.report import format_summary, summarize
 from bbva_gastos.server import serve
-from bbva_gastos.statement import balance_breaks, load_statement
+from bbva_gastos.wealth import save_bank_close
 
-MOVIMIENTOS = DATA / "movimientos.json"
 CLASIFICADOS = DATA / "clasificados.json"
 RESUMEN = DATA / "resumen.json"
 
@@ -52,16 +51,24 @@ def main(argv=None):
 
     sub.add_parser("check", help="Comprueba la clave y la app, sin entrar al banco.")
 
-    connect = sub.add_parser("connect", help="Abre BBVA, guarda el consentimiento y la sesión.")
-    connect.add_argument("--country", default="ES")
-    connect.add_argument("--aspsp", default="BBVA")
-    connect.add_argument("--psu-type", default="personal", choices=("personal", "business"))
+    connect_parser = sub.add_parser("connect", help="Abre BBVA, guarda el consentimiento y la sesión.")
+    connect_parser.add_argument("--country", default="ES")
+    connect_parser.add_argument("--aspsp", default="BBVA")
+    connect_parser.add_argument("--psu-type", default="personal", choices=("personal", "business"))
 
     sync = sub.add_parser("sync", help="Descarga saldos y movimientos con la sesión guardada.")
     sync.add_argument("--days", type=int, default=180)
 
     cargar = sub.add_parser("cargar", help="Lee un PDF, Excel o CSV y lo guarda en la base.")
     cargar.add_argument("fichero")
+    cargar.add_argument("--desde", help="Primer día de cobertura que figura en el extracto (AAAA-MM-DD).")
+    cargar.add_argument("--hasta", help="Último día de cobertura que figura en el extracto (AAAA-MM-DD).")
+    cargar.add_argument("--cuenta", default="", help="Identificador estable de la cuenta (opcional).")
+
+    saldo = sub.add_parser('saldo-bbva', help='Registra un saldo de cierre de BBVA en EUR para una fecha.')
+    saldo.add_argument('fecha', help='Fecha del cierre que indica el banco (AAAA-MM-DD).')
+    saldo.add_argument('saldo', help='Saldo del extracto en euros, con punto decimal.')
+    saldo.add_argument('--cuenta', default='', help='El mismo identificador que usaste al importar esa cuenta.')
 
     entrada = sub.add_parser("entrada", help="Carga los PDF, Excel y CSV nuevos de la carpeta entrada/.")
     entrada.add_argument("--vigilar", action="store_true", help="Repite la lectura cada cierto tiempo.")
@@ -84,7 +91,15 @@ def main(argv=None):
         if args.command == "connect":
             return connect_bank(args.country, args.aspsp, args.psu_type)
         if args.command == "cargar":
-            return cargar_fichero(args.fichero)
+            return cargar_fichero(args.fichero, desde=args.desde, hasta=args.hasta, cuenta=args.cuenta)
+        if args.command == 'saldo-bbva':
+            conn = connect()
+            try:
+                save_bank_close(conn, args.fecha, args.saldo, args.cuenta)
+            finally:
+                conn.close()
+            print(f'Saldo de cierre guardado para {args.fecha}.')
+            return 0
         if args.command == "entrada":
             return vigilar_entrada(args.vigilar, args.segundos)
         if args.command == "clasificar":
@@ -97,39 +112,20 @@ def main(argv=None):
     except JevError as error:
         print(error)
         return 1
-    except ApiError as error:
+    except (ApiError, OSError, ValueError) as error:
         print(error)
         return 1
 
 
-def cargar_fichero(fichero):
-    rows, ignored, lector = load_statement(fichero)
-    if not rows:
-        raise SystemExit(f"No hay movimientos en {fichero}")
-    breaks = balance_breaks(rows)
-    dates = sorted(row["fecha"] for row in rows)
-    print(f"Lectura: {lector}")
-    print(f"Movimientos: {len(rows)}")
-    print(f"Del {dates[0]} al {dates[-1]}")
-    print(f"Saltos de saldo: {breaks}")
-    if ignored:
-        print(f"Líneas no leídas: {len(ignored)}")
-        for line in ignored[:8]:
-            print(f"  {line}")
-    if breaks:
-        print("Hay saltos de saldo. No guardo este fichero en la base: la lectura no cuadra.")
-        return 1
-    DATA.mkdir(parents=True, exist_ok=True)
-    MOVIMIENTOS.write_text(json.dumps(rows, ensure_ascii=False, indent=2), encoding="utf-8")
+def cargar_fichero(fichero, **coverage):
     conn = connect()
     try:
-        result = import_file(conn, fichero)
-        apply_local(conn)
+        result = import_file(conn, fichero, **coverage)
         _print_carga(result)
         _print_estado(conn)
     finally:
         conn.close()
-    return 0
+    return int(result['estado'] in {'vacio', 'saltos'})
 
 
 def vigilar_entrada(vigilar, segundos):
@@ -147,7 +143,7 @@ def vigilar_entrada(vigilar, segundos):
             if resultados and any(item["estado"] == "cargado" for item in resultados):
                 _print_estado(conn)
             if not vigilar:
-                return 0
+                return int(any(item['estado'] in {'error', 'saltos'} for item in resultados))
             time.sleep(pausa)
     except KeyboardInterrupt:
         print("\nParado.")
@@ -162,17 +158,10 @@ def clasificar_movimientos(key_file, rehacer=False):
         total = ensure_ready(conn)
         if not total:
             raise SystemExit("No hay movimientos. Ejecuta primero: python -m bbva_gastos cargar <fichero>")
-        if rehacer:
-            conn.execute(
-                """UPDATE movimientos
-                   SET categoria=NULL, confianza=NULL, origen_clasificacion='pendiente', revisar=1
-                   WHERE origen_clasificacion='jev'"""
-            )
-            conn.commit()
-            apply_local(conn)
-        rows = [dict(row) for row in conn.execute("SELECT * FROM movimientos ORDER BY fecha")]
+        rows = report_rows(conn)
         print(format_summary(summarize(rows)))
-        pending = [row for row in rows if row["origen_clasificacion"] == "pendiente"]
+        pending = [row for row in rows if row["origen_clasificacion"] == "pendiente"
+                   or (rehacer and row["origen_clasificacion"] == "jev")]
         if not pending:
             print("No queda nada pendiente. Jev no hace falta.")
             _write_classified(rows)
@@ -184,9 +173,9 @@ def clasificar_movimientos(key_file, rehacer=False):
             print(f"Pendientes de Jev: {len(pending)}. El panel ya muestra el resto.")
             _write_classified(rows)
             return 1
-        classified, usage = classify(pending, api_key)
+        classified, usage = classify(pending, api_key, refresh=rehacer)
         save_labels(conn, classified)
-        rows = [dict(row) for row in conn.execute("SELECT * FROM movimientos ORDER BY fecha")]
+        rows = report_rows(conn)
         print(format_summary(summarize(rows)))
         print(
             f"Jev: {usage['llamadas']} llamadas, {usage['tokens_entrada']} tokens, "
@@ -205,7 +194,7 @@ def mostrar_resumen():
         total = ensure_ready(conn)
         if not total:
             raise SystemExit("No hay movimientos. Ejecuta primero: python -m bbva_gastos cargar <fichero>")
-        rows = [dict(row) for row in conn.execute("SELECT * FROM movimientos ORDER BY fecha")]
+        rows = report_rows(conn)
     finally:
         conn.close()
     summary = summarize(rows)
@@ -222,6 +211,12 @@ def _write_classified(rows):
 
 def _print_carga(result):
     estado_carga = result["estado"]
+    if estado_carga == 'error':
+        print(f"{result['nombre']}: {result['error']}")
+        return
+    if estado_carga == "cobertura actualizada":
+        print(f"{result['nombre']}: cobertura actualizada sin importar movimientos de nuevo.")
+        return
     if estado_carga == "ya cargado":
         print(f"{result['nombre']}: ya estaba cargado. No lo duplico.")
         return
@@ -325,6 +320,9 @@ def sync_bank(days):
         if not row["fecha"]:
             omitted += 1
             continue
+        if row['divisa'].upper() != 'EUR':
+            raise ValueError('El panel solo admite cuentas en EUR.')
+        row['divisa'] = 'EUR'
         canonical.append(row)
     conn = connect()
     try:

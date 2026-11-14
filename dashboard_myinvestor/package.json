@@ -1,0 +1,6 @@
+{
+  "name": "mis-finanzas-myinvestor",
+  "private": true,
+  "description": "Gráficos para la vista local de MyInvestor",
+  "dependencies": { "chart.js": "4.4.1" }
+}

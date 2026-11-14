@@ -80,6 +80,7 @@ def to_canonical(row):
     parts = [part.strip() for part in (row.get("description") or "").split("|") if part.strip()]
     return {
         "id": row.get("id") or "",
+        "cuenta": row.get("account_uid") or "",
         "fecha": row.get("booking_date") or "",
         "fecha_valor": row.get("value_date") or "",
         "concepto": parts[0] if parts else "Movimiento",

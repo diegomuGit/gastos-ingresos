@@ -33,7 +33,7 @@ def test_hechos_reads_the_open_database():
     assert datos["periodo"] == "todos"
     assert datos["kpis"]["ingresos"] == "100.00"
     assert datos["kpis"]["consumo"] == "5.00"
-    assert datos["movimientos_mayores"][0]["concepto"] == "Abono de nómina"
+    assert "movimientos_mayores" not in datos
     assert clave_de(datos) == clave_de(hechos(conn, "todos"))
     assert datos["serie"][0]["bizum_personas"] == "0.00"
 
