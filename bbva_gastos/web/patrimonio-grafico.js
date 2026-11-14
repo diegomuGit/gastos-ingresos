@@ -363,4 +363,5 @@
     if (!node('patrimonio-evolucion-datos').hidden) selectDate();
   });
   document.addEventListener('finanzas:actualizado', load);
+  document.addEventListener('cartera:sincronizada', load);
 })();

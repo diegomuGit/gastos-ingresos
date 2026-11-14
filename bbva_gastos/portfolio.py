@@ -9,22 +9,29 @@ from bbva_gastos.client import DATA
 PORTFOLIO = Path(__file__).resolve().parent.parent / "dashboard_myinvestor"
 
 
+def snapshot_path():
+    return Path(os.environ.get("BBVA_PATRIMONIO_JSON") or DATA / "patrimonio.json")
+
+
 def snapshot():
-    path = Path(os.environ.get("BBVA_PATRIMONIO_JSON") or DATA / "patrimonio.json")
     try:
-        with path.open(encoding="utf-8-sig") as handle:
+        with snapshot_path().open(encoding="utf-8-sig") as handle:
             data = json.load(handle)
     except FileNotFoundError as error:
-        raise ValueError("Todavía no hay una exportación local de MyInvestor. Consulta el README, genera data/patrimonio.json y pulsa Actualizar.") from error
+        raise ValueError("Todavía no hay una copia local de la cartera. Usa Sincronizar cartera en Patrimonio conjunto o importa los CSV según el README.") from error
     except (OSError, ValueError) as error:
         raise ValueError("No se pudo leer la exportación local de MyInvestor. Vuelve a generarla.") from error
+    validate_snapshot(data)
+    data.pop("spreadsheetUrl", None)
+    return data
+
+
+def validate_snapshot(data):
     required = {"meta", "total", "perf", "mi", "crypto", "status"}
     if (not isinstance(data, dict) or not required <= data.keys()
             or not isinstance(data['status'], list)
             or not all(isinstance(data[key], dict) for key in required - {'status'})):
         raise ValueError("El archivo no es una exportación compatible del dashboard MyInvestor.")
-    data.pop("spreadsheetUrl", None)
-    return data
 
 
 def local_page(path, section):

@@ -169,7 +169,7 @@ def _inputs(conn):
         portfolio_error = None
     except ValueError as error:
         portfolio, portfolio_error = {}, str(error)
-    return bank, _valuations(portfolio), _transfers_by_day(conn, portfolio, rows), portfolio_error, portfolio.get('flujosPatrimonio')
+    return bank, _valuations(portfolio), _transfers_by_day(conn, portfolio, rows), portfolio_error, portfolio
 
 
 def _closing(day, bank, quotes, transfers):
@@ -188,7 +188,7 @@ def _closing(day, bank, quotes, transfers):
 
 
 def summary(conn, requested=None):
-    bank, quotes, transfers, portfolio_error, _ = _inputs(conn)
+    bank, quotes, transfers, portfolio_error, portfolio = _inputs(conn)
     bank_days = {day for days, _, _ in bank.values() for day in days}
     if requested is not None:
         day = closing_date(requested)
@@ -218,9 +218,12 @@ def summary(conn, requested=None):
     if mi is None or crypto is None:
         missing = 'MyInvestor y cripto' if mi is None and crypto is None else 'MyInvestor' if mi is None else 'cripto'
         notices.append(f'Falta una valoración de {missing} en esa fecha.')
+    balances = {day for _, _, records in bank.values() for day, (value, _) in records.items() if value is not None}
     latest = {key: max(values).isoformat() if values else None for key, values in
-              [('bbva', bank_days), ('myinvestor', quotes['mi']), ('cripto', quotes['cr'])]}
-    return {**result, 'ultimo': latest, 'avisos': notices}
+              [('bbva', balances), ('myinvestor', quotes['mi']), ('cripto', quotes['cr'])]}
+    metadata = portfolio.get('meta', {})
+    return {**result, 'ultimo': latest, 'sincronizado_en': metadata.get('sincronizadoEn'),
+            'exportado_en': metadata.get('generatedAt'), 'avisos': notices}
 
 
 def _period_start(period, last):
@@ -273,7 +276,7 @@ def evolution(conn, period='todo'):
     """Solo cierres completos y verificables; los días omitidos nunca se rellenan."""
     if period not in PERIOD_MONTHS.keys() | {'todo', 'ytd'}:
         raise ValueError('Periodo de patrimonio no válido.')
-    bank, quotes, transfers, portfolio_error, flows = _inputs(conn)
+    bank, quotes, transfers, portfolio_error, portfolio = _inputs(conn)
     points, omitted = [], []
     for day in sorted(quotes['mi'].keys() & quotes['cr'].keys()):
         point = _closing(day, bank, quotes, transfers)
@@ -286,4 +289,4 @@ def evolution(conn, period='todo'):
         points = [point for point in points if point['fecha'] >= start.isoformat()]
         omitted = [day for day in omitted if day >= start]
     return {'puntos': points, 'omitidos': len(omitted), 'aviso': portfolio_error,
-            'desglose': _period_breakdown(points, quotes, flows)}
+            'desglose': _period_breakdown(points, quotes, portfolio.get('flujosPatrimonio'))}

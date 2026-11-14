@@ -26,6 +26,7 @@ from bbva_gastos.db import (
 )
 from bbva_gastos.lectura import LecturaError, generar, obtener
 from bbva_gastos.portfolio import PORTFOLIO, chart_path, local_page, snapshot
+from bbva_gastos.sheets_sync import SyncError, synchronize
 from bbva_gastos.transfers import annotate_portfolio, decide as decide_transfer, review as review_transfers
 from bbva_gastos.wealth import evolution as wealth_evolution, summary as wealth_summary
 
@@ -38,6 +39,15 @@ PORT = 8766
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
+        if parsed.path == "/api/patrimonio/sincronizar":
+            if not self._local_request():
+                return self._json(403, {"error": "Sincroniza desde el dashboard local."})
+            if self.headers.get_content_type() != "application/json":
+                return self._json(415, {"error": "Se esperaba una solicitud JSON."})
+            try:
+                return self._json(200, synchronize())
+            except SyncError as error:
+                return self._json(error.status, {"error": str(error)})
         if parsed.path in {"/api/categoria-manual", "/api/conciliar", "/api/conciliar-traspaso"}:
             return self._edit(parsed.path)
         if parsed.path != "/api/lectura":

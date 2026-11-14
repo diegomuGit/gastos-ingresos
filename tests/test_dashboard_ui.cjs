@@ -22,6 +22,7 @@ function app() {
   }
   const document = {
     getElementById(id) { if (!nodes.has(id)) nodes.set(id, node()); return nodes.get(id); },
+    addEventListener() {},
     createElement: node, createElementNS: node, querySelectorAll() { return []; },
     querySelector: node,
   };

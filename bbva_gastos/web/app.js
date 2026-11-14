@@ -998,6 +998,7 @@ async function arrancar() {
   document.getElementById("exportar").addEventListener("click", exportarCsv);
   const traspasos = document.getElementById("traspasos");
   traspasos.addEventListener("toggle", cargarTraspasos);
+  document.addEventListener("cartera:sincronizada", cargarTraspasos);
   if (window.location?.hash === "#traspasos") traspasos.open = true;
   const dialog = document.getElementById("editar-categoria");
   const guardar = document.getElementById("editar-guardar");

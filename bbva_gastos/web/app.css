@@ -431,6 +431,10 @@ footer {
 .patrimonio { margin-bottom: 20px; scroll-margin-top: 12px; }
 .patrimonio-cabecera { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: 12px; }
 .patrimonio-cabecera h2 { margin: 0 0 4px; }
+.patrimonio-sync { display: flex; align-items: center; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px; margin-top: 12px; padding: 12px; background: var(--bbva-bg); border-radius: 8px; }
+.patrimonio-sync .hint { margin: 0; }
+.patrimonio-sync .hint + .hint { margin-top: 4px; }
+#patrimonio-sync-estado:empty { margin: 0; }
 .patrimonio-total { font-size: clamp(1.5rem, 4vw, 2.2rem); font-weight: 700; margin: 8px 0 12px; }
 .patrimonio-partes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 145px), 1fr)); gap: 8px; margin: 0 0 12px; }
 .patrimonio-partes div { border-radius: 8px; background: var(--bbva-bg); padding: 10px 12px; }

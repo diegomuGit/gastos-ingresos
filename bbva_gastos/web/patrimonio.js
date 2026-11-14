@@ -3,6 +3,11 @@
   const eur = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
   const fmt = value => value === null ? 'Sin dato' : eur.format(Number(value));
   const day = value => value ? value.split('-').reverse().join('/') : 'sin datos';
+  const localTime = new Intl.DateTimeFormat('es-ES', { dateStyle: 'short', timeStyle: 'short' });
+  const stamp = value => {
+    const timestamp = Date.parse(value);
+    return Number.isFinite(timestamp) ? localTime.format(timestamp) : '';
+  };
   let controller;
   let selected = '';
 
@@ -16,6 +21,12 @@
 
   function render(data) {
     const { fecha, ultimo, cuentas, traspasos, avisos, total } = data;
+    const synced = stamp(data.sincronizado_en);
+    const exported = stamp(data.exportado_en);
+    node('patrimonio-sincronizado').textContent = synced
+      ? `Última sincronización con Google Sheets · ${synced}`
+      : exported ? `Copia local generada el ${exported} · sincronización pendiente` : 'Sin sincronización registrada';
+    node('patrimonio-fuentes').textContent = `Últimos datos · BBVA ${day(ultimo.bbva)} · MyInvestor ${day(ultimo.myinvestor)} · Cripto ${day(ultimo.cripto)}`;
     node('patrimonio-dia').value = fecha || '';
     node('patrimonio-estado').textContent = fecha
       ? `Cierre del ${day(fecha)}${total === null ? ' · faltan datos para calcular el total' : selected ? '' : ' · última fecha común disponible'}.`
@@ -33,7 +44,6 @@
       return item;
     }));
     const messages = [...avisos];
-    if (!selected && total === null) messages.push(`Última fecha con datos: BBVA ${day(ultimo.bbva)} · MyInvestor ${day(ultimo.myinvestor)} · cripto ${day(ultimo.cripto)}.`);
     list('patrimonio-avisos', messages);
     node('patrimonio-avisos').hidden = !messages.length;
     const entries = cuentas.map((a, i) => `BBVA · ${cuentas.length > 1 ? `Cuenta ${i + 1}` : 'Cuenta'}: ${fmt(a.saldo)}${a.fecha_saldo ? ` · saldo del ${day(a.fecha_saldo)} (${a.fuente === 'manual' ? 'registrado manualmente' : 'extracto'})` : ''}${a.fecha_saldo && a.fecha_saldo !== fecha ? ' · sin movimientos hasta el cierre' : ''}.`);
@@ -45,6 +55,27 @@
     node('patrimonio-datos').hidden = false;
     document.dispatchEvent(new CustomEvent('patrimonio:cierre', { detail: fecha }));
   }
+
+  const syncButton = node('patrimonio-sincronizar');
+  syncButton.addEventListener('click', async () => {
+    if (syncButton.disabled) return;
+    const status = node('patrimonio-sync-estado');
+    syncButton.disabled = true;
+    status.textContent = 'Leyendo la cartera de Google Sheets…';
+    try {
+      const response = await fetch('/api/patrimonio/sincronizar', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'No se pudo sincronizar la cartera.');
+      status.textContent = 'Cartera sincronizada.';
+      document.dispatchEvent(new CustomEvent('cartera:sincronizada'));
+    } catch (error) {
+      status.textContent = error.message;
+    } finally {
+      syncButton.disabled = false;
+    }
+  });
 
   async function load() {
     controller?.abort();
@@ -70,4 +101,5 @@
   node('patrimonio-ultima').addEventListener('click', () => { selected = ''; load(); });
   document.addEventListener('patrimonio:consultar', event => { selected = event.detail; load(); });
   document.addEventListener('finanzas:actualizado', load);
+  document.addEventListener('cartera:sincronizada', load);
 })();

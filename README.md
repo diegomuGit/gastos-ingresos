@@ -180,13 +180,29 @@ Las pruebas de JavaScript necesitan Node.js y usan los módulos estándar. Las s
 
 ## Dashboard MyInvestor
 
-Con el servidor en marcha, abre [Inversión](http://127.0.0.1:8766/inversion). Exporta las pestañas de tu hoja como CSV a `dashboard_myinvestor/data/`, usando su nombre de pestaña como nombre de fichero (`Historico.csv`, `Crypto.csv`, etc.). Desde la raíz, genera la exportación local:
+En [Patrimonio conjunto](http://127.0.0.1:8766/#patrimonio), **Sincronizar cartera** lee la hoja privada de Google Sheets en modo lectura. Recalcula MyInvestor y cripto con el mismo motor de Apps Script. Guarda la copia en `data/patrimonio.json` solo cuando las valoraciones y los flujos pasan la validación. Si falla, muestra el motivo y conserva la copia anterior. El panel muestra la última sincronización correcta, la última fecha de saldo verificable de BBVA, la última valoración de cada cartera y el cierre conjunto.
+
+Para usar una cuenta de servicio sin consentimiento de usuario, crea una cuenta dedicada en un proyecto con **Google Sheets API** habilitada y comparte solo la hoja de cartera con su correo como **Lector**. Guarda la clave JSON en `secrets/cartera-servicio.json` y añade al objeto su campo `"spreadsheet_id"` con el ID de la hoja. El dashboard usa esta clave cuando está presente. Google emite los tokens de acceso con el permiso de solo lectura de Sheets. [Guía de cuentas de servicio de Google](https://developers.google.com/workspace/guides/create-credentials#service-account).
+
+Para autorizar con una cuenta personal de Google:
+
+1. En un proyecto de Google Cloud, habilita **Google Sheets API**, configura el consentimiento OAuth y crea un cliente OAuth de tipo **Aplicación de escritorio**. Si el proyecto está en modo de prueba, añade tu cuenta como usuario de prueba. Sigue la [guía de Google Sheets para Python](https://developers.google.com/workspace/sheets/api/quickstart/python).
+2. Guarda el JSON del cliente en `secrets/cartera-cliente.json`. Instala las dependencias del proyecto con `.\.venv\Scripts\python.exe -m pip install -r requirements.txt` y comprueba que Node.js esté disponible.
+3. Ejecuta el comando con la URL o el ID de tu hoja y concede acceso de lectura con la cuenta que puede abrirla.
+
+```powershell
+.\.venv\Scripts\python.exe -m bbva_gastos autorizar-cartera "URL_O_ID_DE_TU_HOJA"
+```
+
+El comando guarda la autorización y el ID de la hoja en `secrets/cartera-token.json`. Después, pulsa **Sincronizar cartera**. Si Google revoca el acceso, puedes repetir `autorizar-cartera` sin indicar la hoja. La carga de BBVA sigue usando SQLite local.
+
+Si prefieres cargar una copia manual, exporta las pestañas como CSV a `dashboard_myinvestor/data/` con su nombre de pestaña (`Historico.csv`, `Crypto.csv`, etc.) y ejecuta desde la raíz:
 
 ```powershell
 node dashboard_myinvestor/harness.js --out data/patrimonio.json
 ```
 
-Pulsa **Actualizar** tras generar una nueva exportación. Es una copia de solo lectura; la hoja sigue siendo la fuente y su versión de Apps Script se sigue desplegando como antes. La vista local usa tablas si Chart.js no está instalado. Para activar también los gráficos en local:
+Pulsa **Actualizar** en el panel tras generar una copia manual. La vista de [Inversión](http://127.0.0.1:8766/inversion) lee la misma copia y usa tablas si Chart.js no está instalado. Para activar también los gráficos en local:
 
 ```powershell
 npm ci --prefix dashboard_myinvestor
@@ -210,7 +226,7 @@ En cada fila, **Editar** cambia solo la categoría de ese movimiento. Para retir
 
 ## Traspasos de BBVA a MyInvestor
 
-1. Regenera `data/patrimonio.json` con el comando de MyInvestor de arriba. Incluye `Flujos.csv` si la hoja registra allí las aportaciones. También se leen las aportaciones de `Historico.csv` que ya utiliza el cálculo de cartera.
+1. Pulsa **Sincronizar cartera**. Si usas la carga manual, incluye `Flujos.csv` si la hoja registra allí las aportaciones. El cálculo también lee las aportaciones de `Historico`.
 2. Abre [Traspasos BBVA → MyInvestor](http://127.0.0.1:8766/#traspasos), o entra desde **Aportaciones y retiradas** en Inversión. El panel busca salidas en euros y aportaciones del mismo importe con hasta cinco días naturales de diferencia, incluso si cruzan de mes. Si hay más de un candidato para un apunte, lo indica.
 3. Elige **Confirmar traspaso** o **No coinciden**. La decisión se guarda en SQLite y puede deshacerse desde **Decisiones guardadas**. Cada apunte y cada aportación pueden confirmarse una sola vez.
 
@@ -222,7 +238,7 @@ En [Patrimonio conjunto](http://127.0.0.1:8766/#patrimonio) verás el saldo de B
 
 **Evolución del patrimonio** muestra el total y las series de BBVA, MyInvestor, cripto y ajuste por traspasos. Solo aparecen puntos de cierres completos y verificables; un tramo discontinuo indica que no hay cierres intermedios. Selecciona un punto o una fecha en **Consultar importes por fecha** para abrir el desglose de ese cierre.
 
-El **Periodo del gráfico** se cuenta desde el último cierre común disponible. El desglose compara el primer y el último cierre común del intervalo. Cada rentabilidad se expresa en euros y descuenta las aportaciones y retiradas de su cartera. El ahorro neto es el cambio del patrimonio ajustado por traspasos menos ambas rentabilidades. Si la cartera estima flujos de cripto, el panel señala la estimación. Regenera `data/patrimonio.json` para incluir el historial de flujos que necesita el desglose.
+El **Periodo del gráfico** se cuenta desde el último cierre común disponible. El desglose compara el primer y el último cierre común del intervalo. Cada rentabilidad se expresa en euros y descuenta las aportaciones y retiradas de su cartera. El ahorro neto es el cambio del patrimonio ajustado por traspasos menos ambas rentabilidades. Si la cartera estima flujos de cripto, el panel señala la estimación. Sincroniza la cartera para actualizar el historial de flujos que usa el desglose.
 
 Para BBVA se usa la columna **Saldo** del extracto. Si hay varios apuntes del día, deben formar una cadena de saldos que permita identificar el cierre. Un saldo anterior solo se mantiene si los extractos cubren los días intermedios y no hay ningún movimiento posterior hasta el cierre. La suma exige un saldo para todas las cuentas importadas. Usa el mismo `--cuenta` para cada fuente de una misma cuenta para evitar tratarla como dos cuentas distintas.
 

@@ -39,6 +39,7 @@ from bbva_gastos.jev import JevError, classify, load_api_key
 from bbva_gastos.normalize import normalize_transaction, pick_aspsp, to_canonical
 from bbva_gastos.report import format_summary, summarize
 from bbva_gastos.server import serve
+from bbva_gastos.sheets_sync import authorize
 from bbva_gastos.wealth import save_bank_close
 
 CLASIFICADOS = DATA / "clasificados.json"
@@ -80,6 +81,9 @@ def main(argv=None):
 
     sub.add_parser("resumen", help="Muestra ingresos, consumo y ahorro por mes.")
 
+    cartera = sub.add_parser("autorizar-cartera", help="Conecta una hoja privada de Google Sheets en modo lectura.")
+    cartera.add_argument("hoja", nargs="?", help="URL o ID de la hoja. Si se omite, usa la hoja ya guardada.")
+
     servir = sub.add_parser("servir", help="Abre el panel. Lee la base en cada visita.")
     servir.add_argument("--host", default="127.0.0.1")
     servir.add_argument("--port", type=int, default=8766)
@@ -106,6 +110,10 @@ def main(argv=None):
             return clasificar_movimientos(args.key_file, args.rehacer)
         if args.command == "resumen":
             return mostrar_resumen()
+        if args.command == "autorizar-cartera":
+            authorize(args.hoja)
+            print("Google Sheets autorizado. Pulsa Sincronizar cartera en el dashboard.")
+            return 0
         if args.command == "servir":
             return serve(args.host, args.port)
         return sync_bank(args.days)

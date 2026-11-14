@@ -40,6 +40,14 @@
       <button type="button" class="chip" id="patrimonio-ultima">Última fecha común</button>
     </form>
   </div>
+  <div class="patrimonio-sync">
+    <div>
+      <p class="hint" id="patrimonio-sincronizado">Última sincronización · consultando</p>
+      <p class="hint" id="patrimonio-fuentes">BBVA · MyInvestor · Cripto</p>
+    </div>
+    <button type="button" class="chip" id="patrimonio-sincronizar" aria-describedby="patrimonio-sync-estado">Sincronizar cartera</button>
+  </div>
+  <p class="hint" id="patrimonio-sync-estado" role="status"></p>
   <p class="hint" id="patrimonio-estado" role="status">Buscando una fecha común…</p>
   <div id="patrimonio-datos" hidden>
     <p class="patrimonio-total" id="patrimonio-total"></p>
