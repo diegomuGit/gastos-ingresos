@@ -1,0 +1,4 @@
+data/
+*.png
+preview.html
+node_modules/

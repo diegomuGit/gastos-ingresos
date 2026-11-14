@@ -169,3 +169,7 @@ Cuenta de empresa: `python -m bbva_gastos connect --psu-type business`. BBVA pid
 ```powershell
 .\.venv\Scripts\python -m pytest
 ```
+
+## Dashboard MyInvestor
+
+El dashboard de la cartera MyInvestor + cripto (Google Apps Script) vive en [`dashboard_myinvestor/`](dashboard_myinvestor/README.md).

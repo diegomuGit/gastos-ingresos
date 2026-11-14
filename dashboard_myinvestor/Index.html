@@ -1,0 +1,1305 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patrimonio · MyInvestor + cripto</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+  /* ---------- Tokens (claro) ---------- */
+  :root {
+    color-scheme: light;
+    --page:#f5f5f2; --surface:#ffffff; --surface-2:#f6f6f3;
+    --ink:#0b0b0b; --ink-2:#52514e; --ink-3:#6b6a65; --muted:#898781;
+    --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+    --mi:#2a78d6; --cr:#eb6834;                         /* bloques: MyInvestor / cripto */
+    --rv:#184f95; --rf:#3987e5; --cash:#86b6ef; --otros:#898781;   /* clases de activo: una sola familia, por riesgo */
+    --bench:#898781;
+    --up:#006300; --down:#c22f2f;                       /* texto de variaciones */
+    --pos:#2a78d6; --neg:#e34948;                       /* barras divergentes: suma / resta (contribuciones) */
+    --good:#0ca30c; --warn:#fab219; --crit:#d03b3b;     /* estado (siempre con etiqueta) */
+    --btn:#256abf; --focus:#2a78d6;
+    --warn-bg:#fff6e0; --warn-ink:#7a4b00; --err-bg:#fdecec; --err-ink:#8f1f1f;
+  }
+  /* ---------- Tokens (oscuro) ---------- */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:#0d0d0d; --surface:#1a1a19; --surface-2:#232321;
+    --ink:#f0efec; --ink-2:#c3c2b7; --ink-3:#a3a299; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+    --mi:#3987e5; --cr:#d95926;
+    --rv:#86b6ef; --rf:#3987e5; --cash:#184f95; --otros:#898781;
+    --bench:#898781;
+    --up:#0ca30c; --down:#f07c7c;
+    --pos:#3987e5; --neg:#e66767;
+    --btn:#256abf; --focus:#86b6ef;
+    --warn-bg:#33290f; --warn-ink:#fad27a; --err-bg:#3a1717; --err-ink:#f6b1b1;
+  }
+
+  * { box-sizing:border-box; }
+  [hidden] { display:none !important; }
+  html { -webkit-text-size-adjust:100%; }
+  body { margin:0; background:var(--page); color:var(--ink); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif; }
+  h1,h2,h3,p { margin:0; }
+  button { font:inherit; color:inherit; }
+  :focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+  .wrap { max-width:1280px; margin:0 auto; padding:0 20px; }
+
+  /* ---------- Barra superior ---------- */
+  .top { position:sticky; top:0; z-index:20; background:var(--page); background:color-mix(in srgb,var(--page) 86%,transparent);
+         -webkit-backdrop-filter:blur(10px); backdrop-filter:blur(10px); border-bottom:1px solid var(--border); }
+  .top-in { max-width:1280px; margin:0 auto; padding:10px 20px; display:flex; align-items:center; gap:16px; }
+  .brand { display:flex; align-items:baseline; gap:8px; white-space:nowrap; }
+  .brand b { font-size:16px; font-weight:650; letter-spacing:-.01em; }
+  .brand span { color:var(--ink-3); font-size:12.5px; }
+  .nav { display:flex; gap:2px; margin-left:8px; }
+  .nav button { border:0; background:none; padding:6px 10px; border-radius:8px; color:var(--ink-2); cursor:pointer; font-size:13px; }
+  .nav button:hover { background:var(--surface-2); color:var(--ink); }
+  .top-r { margin-left:auto; display:flex; align-items:center; gap:8px; }
+  .upd { color:var(--ink-3); font-size:12.5px; white-space:nowrap; }
+  .btn { border:0; background:var(--btn); color:#fff; border-radius:9px; padding:7px 13px; font-weight:600; font-size:13px; cursor:pointer; white-space:nowrap; }
+  .btn:hover { filter:brightness(1.08); } .btn:disabled { opacity:.6; cursor:progress; }
+  .btn.ghost { background:var(--surface); color:var(--ink-2); border:1px solid var(--border); padding:6px 10px; }
+
+  /* ---------- Estructura ---------- */
+  main { padding-top:18px; padding-bottom:8px; }
+  .sec { margin-bottom:34px; scroll-margin-top:64px; }
+  .grid { display:grid; grid-template-columns:repeat(12,minmax(0,1fr)); gap:16px; }
+  .c12 { grid-column:span 12; } .c7 { grid-column:span 7; } .c6 { grid-column:span 6; } .c5 { grid-column:span 5; }
+  .col { display:flex; flex-direction:column; gap:16px; min-width:0; } .col > .card:last-child { flex:1; }
+  .card { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; min-width:0; }
+  .card-h { display:flex; justify-content:space-between; align-items:flex-start; gap:12px; margin-bottom:12px; }
+  .card h3 { font-size:15px; font-weight:650; letter-spacing:-.005em; }
+  .sub { color:var(--ink-3); font-size:12.5px; margin-top:2px; }
+  .m { color:var(--ink-3); font-size:11.5px; font-weight:400; }
+  .foot { color:var(--ink-3); font-size:12px; line-height:1.5; margin-top:10px; }
+  .foot p + p { margin-top:4px; }
+  .up { color:var(--up); } .down { color:var(--down); } .na { color:var(--ink-3); }
+  .ast { color:var(--ink-3); font-weight:400; margin-left:2px; }
+  .scroll-x { overflow-x:auto; -webkit-overflow-scrolling:touch; }
+  .scroll-y { max-height:300px; overflow:auto; }
+  .empty { color:var(--ink-3); font-size:13px; padding:14px 0 6px; line-height:1.5; }
+  .empty b { display:block; color:var(--ink-2); font-size:14px; margin-bottom:2px; }
+  .only-sm { display:none !important; }
+
+  /* ---------- Cabecera de sección ---------- */
+  .sec-h { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 14px; margin:0 2px 12px; }
+  .sec-h h2 { font-size:21px; font-weight:650; letter-spacing:-.015em; display:flex; align-items:center; gap:9px; }
+  .sec-h h2 i { width:11px; height:11px; border-radius:3px; display:inline-block; }
+  .sec-h .big { font-size:17px; font-weight:600; }
+  .sec-h .w { color:var(--ink-3); font-size:13px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-left:auto; }
+  .chip { font-size:12px; color:var(--ink-2); background:var(--surface); border:1px solid var(--border); border-radius:999px; padding:3px 10px; white-space:nowrap; }
+  .chip.warn { background:var(--warn-bg); color:var(--warn-ink); border-color:transparent; }
+  .dot { display:inline-block; width:7px; height:7px; border-radius:50%; margin-right:6px; vertical-align:1px; }
+
+  /* ---------- Hero ---------- */
+  .hero { display:grid; grid-template-columns:minmax(0,1.3fr) minmax(0,1fr); gap:32px; align-items:center; padding:24px 26px; margin-bottom:16px; }
+  .over { color:var(--ink-3); font-size:13px; font-weight:600; }
+  .hero-num { font-size:clamp(38px,5.2vw,60px); font-weight:650; letter-spacing:-.025em; line-height:1.08; margin:2px 0 6px; }
+  .hero-d { font-size:13.5px; color:var(--ink-2); min-height:20px; }
+  .comp { margin-top:18px; }
+  .stack { display:flex; gap:2px; height:12px; }
+  .stack > span { min-width:3px; height:100%; }
+  .stack > span:first-child { border-radius:4px 0 0 4px; } .stack > span:last-child { border-radius:0 4px 4px 0; }
+  .stack > span:only-child { border-radius:4px; }
+  .comp-l { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 22px; margin-top:12px; }
+  .comp-l .k { display:flex; align-items:center; gap:7px; font-size:13px; color:var(--ink-2); }
+  .comp-l .v { font-size:17px; font-weight:600; margin-top:1px; }
+  .comp-l .v small { font-size:13px; font-weight:500; color:var(--ink-3); margin-left:6px; }
+  .sw { display:inline-block; width:10px; height:10px; border-radius:2px; flex:none; }
+  .sw.line { height:0; width:14px; border-top:2px solid; border-radius:0; background:none !important; }
+  .sw.dash { height:0; width:14px; border-top:2px dashed; border-radius:0; background:none !important; }
+  .ret { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; }
+  .ret .t { background:var(--surface-2); border-radius:11px; padding:11px 13px; }
+  .ret .l { font-size:12.5px; color:var(--ink-3); }
+  .ret .p { font-size:21px; font-weight:650; letter-spacing:-.01em; margin-top:1px; }
+  .ret .p i { font-style:normal; font-size:11px; margin-right:5px; vertical-align:2px; }
+  .ret .e { font-size:12.5px; color:var(--ink-2); }
+  .ret-cap { font-size:12px; color:var(--ink-3); margin-top:9px; }
+
+  /* ---------- Filtros ---------- */
+  .filters { display:flex; flex-wrap:wrap; align-items:center; gap:8px 12px; margin:0 2px 12px; }
+  .filters-l { font-size:12.5px; color:var(--ink-3); }
+  .seg { display:inline-flex; background:var(--surface-2); border:1px solid var(--border); border-radius:10px; padding:2px; }
+  .seg button { border:0; background:none; padding:5px 11px; border-radius:8px; font-size:12.5px; color:var(--ink-2); cursor:pointer; white-space:nowrap; }
+  .seg button:hover { color:var(--ink); }
+  .seg button[aria-pressed="true"] { background:var(--surface); color:var(--ink); font-weight:600; box-shadow:0 0 0 1px var(--border); }
+
+  /* ---------- Gráficos ---------- */
+  .chart { position:relative; width:100%; }
+  .chart canvas { display:block; }
+  .chart.h-cr { height:340px; }
+  .nochart { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; text-align:center; color:var(--ink-3); font-size:13px;
+             background:var(--surface-2); border-radius:10px; padding:16px; }
+  .legend { display:flex; flex-wrap:wrap; gap:6px 16px; font-size:12.5px; color:var(--ink-2); margin-bottom:8px; align-items:center; }
+  .legend span { display:inline-flex; align-items:center; gap:6px; }
+  .legend b { color:var(--ink); font-weight:600; }
+  details.more { margin-top:10px; border-top:1px solid var(--grid); padding-top:8px; }
+  details.more > summary { cursor:pointer; color:var(--ink-2); font-size:12.5px; list-style-position:inside; }
+  details.more[open] > summary { margin-bottom:8px; }
+  .method { font-size:12.5px; color:var(--ink-2); line-height:1.55; }
+  .method p + p { margin-top:7px; }
+  .method code { font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:var(--surface-2); padding:1px 5px; border-radius:5px; white-space:nowrap; }
+
+  /* ---------- Tablas ---------- */
+  .tbl { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; }
+  .tbl th { font-size:11.5px; font-weight:600; color:var(--ink-3); text-align:right; padding:6px 8px; border-bottom:1px solid var(--grid); white-space:nowrap; background:var(--surface); }
+  .tbl td { padding:8px; border-bottom:1px solid var(--grid); text-align:right; vertical-align:top; white-space:nowrap; }
+  .tbl tr:last-child td { border-bottom:0; }
+  .tbl .l { text-align:left; }
+  .tbl th:first-child, .tbl td:first-child { padding-left:0; } .tbl th:last-child, .tbl td:last-child { padding-right:0; }
+  .tbl .m { display:block; }
+  .tbl tfoot td { font-weight:600; border-top:1px solid var(--axis); border-bottom:0; }
+  .scroll-y .tbl th { position:sticky; top:0; }
+  .tbl.perf td b { font-size:14.5px; font-weight:650; }
+  .tbl.perf th i, .legend i.sq { display:inline-block; width:8px; height:8px; border-radius:2px; margin-right:6px; }
+  th.sort { cursor:pointer; user-select:none; } th.sort:hover { color:var(--ink); }
+  th.sort.on::after { content:" ↓"; } th.sort.on.asc::after { content:" ↑"; }
+  .name { font-weight:600; max-width:320px; overflow:hidden; text-overflow:ellipsis; }
+  .pill { display:inline-block; font-size:10.5px; font-weight:650; padding:1px 7px; border-radius:999px; background:var(--surface-2); color:var(--ink-2); border:1px solid var(--border); }
+  .wbar { display:inline-block; height:6px; border-radius:0 3px 3px 0; background:var(--mi); vertical-align:middle; margin-left:8px; }
+
+  /* ---------- Tarjetas de cifra ---------- */
+  .tiles { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+  .tile { background:var(--surface); border:1px solid var(--border); border-radius:13px; padding:13px 15px; min-width:0; }
+  .tile .l { font-size:12.5px; color:var(--ink-3); }
+  .tile .v { font-size:20px; font-weight:650; letter-spacing:-.012em; margin:3px 0 4px; overflow-wrap:anywhere; }
+  .tile .v small { font-size:12.5px; font-weight:600; color:var(--ink-2); margin-left:4px; letter-spacing:0; }
+  .tile .s { font-size:12px; color:var(--ink-3); line-height:1.45; }
+  .tile .s b { color:var(--ink-2); font-weight:600; }
+  .hint { font-size:12px; color:var(--ink-3); line-height:1.5; margin:-6px 2px 16px; max-width:980px; }
+  .hint b { color:var(--ink-2); font-weight:600; }
+
+  /* ---------- Asignación ---------- */
+  .ab { display:grid; grid-template-columns:62px minmax(0,1fr); gap:7px 10px; align-items:center; margin-bottom:10px; }
+  .ab .lab { font-size:12.5px; color:var(--ink-3); }
+  .ab .stack { height:22px; }
+  .ab .stack > span { display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; white-space:nowrap; overflow:hidden; }
+  .dv { display:flex; align-items:center; gap:8px; }
+  .dv-t { position:relative; width:74px; height:8px; background:var(--surface-2); border-radius:4px; flex:none; }
+  .dv-t::after { content:""; position:absolute; left:50%; top:-2px; bottom:-2px; width:1px; background:var(--axis); }
+  .dv-t i { position:absolute; top:0; bottom:0; border-radius:2px; background:var(--ink-3); }
+  .st { font-size:11.5px; color:var(--ink-3); display:block; margin-top:2px; }
+
+  /* ---------- Barras horizontales (geografía, top 5) ---------- */
+  .hb { display:grid; grid-template-columns:minmax(74px,auto) minmax(0,1fr) auto; gap:9px 10px; align-items:center; font-size:13px; }
+  .hb .t { height:10px; }
+  .hb .t i { display:block; height:100%; min-width:2px; background:var(--mi); border-radius:0 4px 4px 0; }
+  .hb .n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .hb .n .m { display:inline; margin-left:6px; }
+  .stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin-bottom:12px; }
+  .stats.s4 { grid-template-columns:repeat(4,minmax(0,1fr)); }
+  .stat { background:var(--surface-2); border-radius:10px; padding:9px 11px; min-width:0; }
+  .stat span { font-size:12px; color:var(--ink-3); display:block; }
+  .stat span:first-child { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .stat b { font-size:16px; font-weight:650; display:block; margin:1px 0; overflow-wrap:anywhere; }
+  .top5 { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:2px 10px; font-size:13px; }
+  .top5 .nm { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .top5 .n { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .top5 .t { grid-column:1 / -1; height:6px; margin:0 0 8px; }
+  .top5 .t i { display:block; height:100%; min-width:2px; background:var(--mi); border-radius:0 3px 3px 0; }
+
+  /* ---------- Avisos, carga y pie ---------- */
+  .banner { border-radius:12px; padding:11px 14px; font-size:13px; margin-bottom:14px; background:var(--warn-bg); color:var(--warn-ink); line-height:1.5; }
+  .banner.err { background:var(--err-bg); color:var(--err-ink); }
+  .banner b { font-weight:650; }
+  .loading { text-align:center; color:var(--ink-3); padding:90px 0; font-size:14px; }
+  #content.refetch { opacity:.55; transition:opacity .15s; }
+  footer { color:var(--ink-3); font-size:12px; padding-top:6px; padding-bottom:28px; line-height:1.6; }
+  footer a { color:var(--ink-2); }
+  footer details { margin-bottom:8px; } footer summary { cursor:pointer; color:var(--ink-2); }
+  footer .tbl { margin-top:8px; font-size:12px; max-width:860px; }
+  footer .tbl td { white-space:normal; }
+
+  /* ---------- Rendimiento diario y drivers (v4) ---------- */
+  .sw.tick { width:14px; height:0; border-top:3px solid; border-radius:0; background:none !important; }
+  .sw.dia { width:9px; height:9px; transform:rotate(45deg); border-radius:1px; margin:0 2px; }
+  .sw.soft { opacity:.42; } :root[data-theme="dark"] .sw.soft { opacity:.6; }
+  .sumline { display:flex; flex-wrap:wrap; gap:4px 14px; font-size:12.5px; color:var(--ink-2); margin-bottom:10px; }
+  .sumline b { color:var(--ink); font-weight:650; }
+  .drv { display:grid; grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) auto; gap:4px 12px; align-items:center; font-size:13px; }
+  .drv .nm { min-width:0; text-align:left; background:none; border:0; border-radius:6px; padding:3px 4px; margin-left:-4px; cursor:pointer; color:var(--ink); display:flex; flex-direction:column; }
+  .drv .nm:hover { background:var(--surface-2); }
+  .drv .nm.fixed { cursor:default; } .drv .nm.fixed:hover { background:none; }
+  .drv .nm.fixed span { white-space:normal; }
+  .drv .nm b { font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .drv .nm span { font-size:11.5px; color:var(--ink-3); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .drv .nm[aria-pressed="true"] b { text-decoration:underline; text-decoration-color:var(--mi); text-decoration-thickness:2px; text-underline-offset:3px; }
+  .drv .tr { position:relative; height:16px; }
+  .drv .tr::before { content:""; position:absolute; left:50%; top:-5px; bottom:-5px; width:1px; background:var(--axis); }
+  .drv .tr i { position:absolute; top:2px; bottom:2px; min-width:2px; }
+  .drv .tr i.p { left:calc(50% + 1px); background:var(--pos); border-radius:0 4px 4px 0; }
+  .drv .tr i.n { right:calc(50% + 1px); background:var(--neg); border-radius:4px 0 0 4px; }
+  .drv .tr i.g { background:var(--muted); }
+  .drv .v { text-align:right; font-variant-numeric:tabular-nums; white-space:nowrap; line-height:1.25; }
+  .drv .v b { display:block; font-weight:650; }
+  .drv .v span { font-size:11.5px; color:var(--ink-3); }
+  .drv .sep { grid-column:1 / -1; border-top:1px solid var(--grid); margin:6px 0 2px; }
+  .drv .cap { grid-column:1 / -1; font-size:11.5px; color:var(--ink-3); }
+  .caution { font-size:12.5px; line-height:1.5; background:var(--warn-bg); color:var(--warn-ink); border-radius:10px; padding:8px 11px; margin-bottom:10px; }
+  .mini-h { font-size:12.5px; font-weight:600; color:var(--ink-2); margin:16px 0 6px; padding-top:12px; border-top:1px solid var(--grid); }
+  .pick { display:flex; flex-wrap:wrap; gap:6px; margin-top:10px; }
+  .pick button { border:1px solid var(--border); background:var(--surface); color:var(--ink-2); border-radius:999px; padding:3px 10px; font-size:12px; cursor:pointer; white-space:nowrap; font-variant-numeric:tabular-nums; }
+  .pick button:hover { color:var(--ink); background:var(--surface-2); }
+  .pick button[aria-pressed="true"] { border-color:var(--mi); color:var(--ink); box-shadow:0 0 0 1px var(--mi) inset; font-weight:600; }
+  .pick button i { display:inline-block; width:12px; height:0; border-top:2px solid var(--muted); vertical-align:3px; margin-right:6px; }
+  .pick button[aria-pressed="true"] i { border-top-color:var(--mi); }
+  .tbl td.nt { white-space:normal; text-align:left; min-width:180px; color:var(--ink-3); font-size:12px; }
+  .pill.est { background:var(--warn-bg); color:var(--warn-ink); border-color:transparent; }
+
+  /* ---------- Adaptación ---------- */
+  @media (max-width:1180px) { .tiles { grid-template-columns:repeat(3,minmax(0,1fr)); } .stats.s4 { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+  @media (max-width:980px) {
+    .c7,.c6,.c5 { grid-column:span 12; }
+    .hero { grid-template-columns:1fr; gap:20px; }
+    .brand span, .upd { display:none; }
+  }
+  @media (max-width:720px) {
+    .wrap { padding:0 12px; } .top-in { padding:8px 12px; gap:8px; }
+    .nav { margin-left:0; } .nav button { padding:6px 7px; }
+    .btn .lbl { display:none; }
+    .card { padding:15px 14px; border-radius:13px; } .hero { padding:18px 16px; }
+    .grid, .col { gap:12px; } .tiles { grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin-bottom:12px; }
+    .tile { padding:11px 12px; } .tile .v { font-size:18px; }
+    .sec { margin-bottom:26px; } .sec-h h2 { font-size:19px; } .chips { margin-left:0; }
+    .h-sm { display:none !important; } .only-sm { display:block !important; }
+    .name { max-width:none; white-space:normal; }
+    #posTbl td:first-child { white-space:normal; width:99%; } #posTbl td:first-child .m { overflow-wrap:anywhere; }
+    .card-h { flex-wrap:wrap; }
+    .comp-l { gap:10px 14px; } .comp-l .v { font-size:15.5px; } .comp-l .v small { display:block; margin:0; }
+    .dv-t { width:44px; }
+    .ret .p { font-size:19px; }
+  }
+  @media (max-width:420px) { .brand b { font-size:15px; } .nav button { font-size:12.5px; padding:6px 5px; } }
+  @media print { .top, .filters, details.more, .btn { display:none !important; } body { background:#fff; } .card, .tile { break-inside:avoid; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="top-in">
+    <div class="brand"><b>Patrimonio</b><span>MyInvestor + cripto</span></div>
+    <nav class="nav" aria-label="Secciones">
+      <button type="button" data-go="sec-total">Resumen</button>
+      <button type="button" data-go="sec-dia">Diario</button>
+      <button type="button" data-go="sec-mi">MyInvestor</button>
+      <button type="button" data-go="sec-cr">Cripto</button>
+    </nav>
+    <div class="top-r">
+      <span class="upd" id="updated"></span>
+      <button type="button" class="btn ghost" id="themeBtn" title="Cambiar entre tema claro y oscuro" aria-label="Cambiar entre tema claro y oscuro">◐</button>
+      <button type="button" class="btn" id="refresh" title="Volver a leer la hoja">↻<span class="lbl"> Actualizar</span></button>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="banner" id="banner" hidden></div>
+  <div class="loading" id="loading">Cargando datos de la hoja…</div>
+
+  <div id="content" hidden>
+    <!-- ===== Patrimonio total ===== -->
+    <section class="sec" id="sec-total">
+      <div class="card hero" id="hero"></div>
+
+      <div class="filters">
+        <span class="filters-l">Periodo de los gráficos</span>
+        <div class="seg" id="rangeSeg" role="group" aria-label="Periodo de los gráficos">
+          <button type="button" data-v="1m">1 mes</button><button type="button" data-v="3m">3 meses</button><button type="button" data-v="ytd">YTD</button><button type="button" data-v="1a">1 año</button><button type="button" data-v="todo">Todo</button>
+        </div>
+        <span class="filters-l" id="rangeNote"></span>
+      </div>
+
+      <div class="grid">
+        <div class="card c7">
+          <div class="card-h">
+            <div><h3>Evolución del patrimonio total</h3><p class="sub" id="evoSub"></p></div>
+            <div class="seg" id="scaleSeg" role="group" aria-label="Escala del eje vertical">
+              <button type="button" data-v="zero">Desde 0</button><button type="button" data-v="fit">Ajustada</button>
+            </div>
+          </div>
+          <div class="legend" id="evoLegend"></div>
+          <div class="chart" style="height:310px"><canvas id="chEvo" role="img" aria-label="Evolución del patrimonio total: MyInvestor y cripto apilados"></canvas></div>
+          <details class="more"><summary>Ver los datos en tabla</summary><div class="scroll-y"><table class="tbl" id="evoTbl"></table></div><p class="foot" id="evoTblNote"></p></details>
+        </div>
+        <div class="card c5">
+          <div class="card-h"><div><h3>Rentabilidad sin aportaciones</h3><p class="sub">Ponderada por tiempo (TWR) y ganancia de mercado en euros</p></div></div>
+          <div class="scroll-x"><table class="tbl perf" id="perfTbl"></table></div>
+          <div class="foot" id="perfNotes"></div>
+          <details class="more"><summary>Cómo se calcula</summary><div class="method" id="method"></div></details>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== Rendimiento diario y drivers (v4) ===== -->
+    <section class="sec" id="sec-dia">
+      <div class="sec-h" id="dayHead"></div>
+      <div id="dayEmpty" class="card" hidden></div>
+      <div id="dayBody">
+        <div class="filters">
+          <span class="filters-l">Periodo</span>
+          <div class="seg" id="dwinSeg" role="group" aria-label="Periodo de la vista diaria y de los drivers">
+            <button type="button" data-v="1d">1 día</button><button type="button" data-v="20d">20 días</button><button type="button" data-v="3m">3 meses</button><button type="button" data-v="ytd">YTD</button>
+          </div>
+          <span class="filters-l" id="dwinNote"></span>
+        </div>
+        <div class="grid">
+          <div class="card c12">
+            <div class="card-h">
+              <div><h3>Rendimiento de cada día · solo mercado</h3><p class="sub" id="daySub"></p></div>
+              <div class="seg" id="dunitSeg" role="group" aria-label="Unidades del gráfico diario">
+                <button type="button" data-v="pct">%</button><button type="button" data-v="eur">€</button>
+              </div>
+            </div>
+            <div class="legend" id="dayLegend"></div>
+            <div class="chart" style="height:300px"><canvas id="chDay" role="img" aria-label="Rendimiento diario de MyInvestor, del total con BTC y efecto del BTC"></canvas></div>
+            <div class="foot" id="dayNote"></div>
+            <details class="more"><summary>Ver los datos en tabla</summary><div class="scroll-y"><table class="tbl" id="dayTbl"></table></div></details>
+          </div>
+          <div class="card c6">
+            <div class="card-h"><div><h3>Qué ha movido MyInvestor</h3><p class="sub" id="drvSub"></p></div></div>
+            <div id="drv"></div>
+            <div id="cumBox">
+              <div class="mini-h">Contribución acumulada en el tiempo</div>
+              <div class="legend" id="cumLegend"></div>
+              <div class="chart" style="height:200px"><canvas id="chCum" role="img" aria-label="Contribución acumulada de cada activo a la rentabilidad de MyInvestor"></canvas></div>
+            </div>
+            <div class="foot" id="drvNote"></div>
+            <details class="more"><summary>Ver los datos en tabla</summary><div class="scroll-x"><table class="tbl" id="drvTbl"></table></div></details>
+          </div>
+          <div class="card c6">
+            <div class="card-h"><div><h3>Base 100 por activo</h3><p class="sub" id="b100Sub"></p></div></div>
+            <p class="caution" id="b100Warn"></p>
+            <div class="legend" id="b100Legend"></div>
+            <div class="chart" style="height:280px"><canvas id="chB100" role="img" aria-label="Rendimiento en base 100 de cada activo y de MyInvestor"></canvas></div>
+            <div class="pick" id="b100Pick" role="group" aria-label="Activo destacado"></div>
+            <div class="foot" id="b100Note"></div>
+            <details class="more"><summary>Ver los datos en tabla</summary><div class="scroll-x"><table class="tbl" id="b100Tbl"></table></div></details>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== (a) MyInvestor ===== -->
+    <section class="sec" id="sec-mi">
+      <div class="sec-h" id="miHead"></div>
+      <div id="miEmpty" class="card" hidden></div>
+      <div id="miBody">
+        <div class="tiles" id="miTiles"></div>
+        <p class="hint" id="miNote" hidden></p>
+        <div class="grid">
+          <div class="c6 col">
+            <div class="card">
+              <div class="card-h"><div><h3>Asignación frente al objetivo</h3><p class="sub" id="allocSub"></p></div></div>
+              <div id="alloc"></div>
+            </div>
+            <div class="card">
+              <div class="card-h"><div><h3>Geografía</h3><p class="sub">Mirando dentro de los fondos, sobre las inversiones</p></div></div>
+              <div id="geo"></div>
+            </div>
+          </div>
+          <div class="card c6">
+            <div class="card-h"><div><h3 id="benchTitle">MyInvestor frente al MSCI World</h3><p class="sub">Rentabilidad acumulada sin aportaciones, en el periodo elegido</p></div></div>
+            <div class="legend" id="benchLegend"></div>
+            <div class="chart" style="height:250px"><canvas id="chBench" role="img" aria-label="Rentabilidad acumulada de MyInvestor frente al índice de referencia"></canvas></div>
+            <div class="scroll-x" style="margin-top:10px"><table class="tbl" id="benchTbl"></table></div>
+            <div class="foot" id="benchNote"></div>
+            <details class="more"><summary>Ver los datos en tabla</summary><div class="scroll-y"><table class="tbl" id="benchData"></table></div></details>
+          </div>
+          <div class="card c12">
+            <div class="card-h"><div><h3>Posiciones</h3><p class="sub" id="posSub"></p></div></div>
+            <div class="scroll-x"><table class="tbl" id="posTbl"></table></div>
+          </div>
+          <div class="card c6">
+            <div class="card-h"><div><h3>Concentración</h3><p class="sub">Sobre las inversiones (sin efectivo)</p></div></div>
+            <div id="conc"></div>
+          </div>
+          <div class="card c6">
+            <div class="card-h"><div><h3>Aportaciones y retiradas</h3><p class="sub" id="flowsSub"></p></div></div>
+            <div id="flows"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ===== (b) Cripto ===== -->
+    <section class="sec" id="sec-cr">
+      <div class="sec-h" id="crHead"></div>
+      <div id="crEmpty" class="card" hidden></div>
+      <div id="crBody">
+        <div class="tiles" id="crTiles"></div>
+        <p class="hint" id="crNote"></p>
+        <div class="grid">
+          <div class="card c7">
+            <div class="card-h"><div><h3>Valor frente a coste</h3><p class="sub">La zona sombreada es la plusvalía (o minusvalía) latente</p></div></div>
+            <div class="legend" id="crLegend"></div>
+            <div class="chart h-cr"><canvas id="chCr" role="img" aria-label="Valor de la cripto frente a su coste"></canvas></div>
+            <details class="more"><summary>Ver los datos en tabla</summary><div class="scroll-y"><table class="tbl" id="crData"></table></div></details>
+          </div>
+          <div class="card c5" id="crMovsCard">
+            <div class="card-h"><div><h3>Compras registradas</h3><p class="sub" id="crMovsSub">Pestaña Crypto_Movs</p></div></div>
+            <div id="crMovs"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+</main>
+<footer class="wrap" id="footer"></footer>
+
+<script>
+(function () {
+'use strict';
+
+var REFRESH_MS = 5 * 60 * 1000;
+var MESES = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+var NB = '\u00a0', MINUS = '\u2212';
+var AST = '<span class="ast" title="Historial más corto que el periodo: desde el primer registro">*</span>';
+var D = null, charts = {}, lastLoad = 0, busy = false;
+// Opciones por fragmento de URL (para previews y pruebas): #theme=dark&scale=zero&range=1m&dwin=1d&dday=2026-10-29&dunit=eur&dsel=GOOG
+var HASH = {}; String(location.hash || '').replace(/^#/, '').split('&').forEach(function (kv) { var p = kv.split('='); if (p[0]) HASH[p[0]] = decodeURIComponent(p[1] || '1'); });
+var state = { range: HASH.range || recall('range') || 'todo', scale: HASH.scale || recall('scale') || 'auto', sort: { k: 'valor', dir: -1 },
+  dwin: HASH.dwin || recall('dwin') || '20d', dday: HASH.dday || null, dunit: HASH.dunit || recall('dunit') || 'pct', dsel: HASH.dsel || null };
+var assetBy = {};
+
+/* ===================== Utilidades ===================== */
+function el(id) { return document.getElementById(id); }
+function esc(s) { return String(s === null || s === undefined ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function recall(k) { try { return window.localStorage.getItem('patrimonio.' + k); } catch (e) { return null; } }
+function remember(k, v) { try { window.localStorage.setItem('patrimonio.' + k, v); } catch (e) { /* almacenamiento no disponible */ } }
+function isNum(v) { return typeof v === 'number' && isFinite(v); }
+function cssVar(n) { return getComputedStyle(document.documentElement).getPropertyValue(n).trim(); }
+function rgba(hex, a) { var h = hex.replace('#', ''); return 'rgba(' + parseInt(h.substring(0, 2), 16) + ',' + parseInt(h.substring(2, 4), 16) + ',' + parseInt(h.substring(4, 6), 16) + ',' + a + ')'; }
+function lum(hex) { var h = hex.replace('#', ''), c = [0, 2, 4].map(function (i) { var v = parseInt(h.substring(i, i + 2), 16) / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+/** Tinta legible (blanca o negra) sobre un relleno de color. */
+function mix(a, b, t) { var x = a.replace('#', ''), y = b.replace('#', ''); return '#' + [0, 2, 4].map(function (i) { return ('0' + Math.round(parseInt(x.substring(i, i + 2), 16) * t + parseInt(y.substring(i, i + 2), 16) * (1 - t)).toString(16)).slice(-2); }).join(''); }
+function inkOn(hex) { var L = lum(hex); return 1.05 / (L + 0.05) > (L + 0.05) / 0.0533 ? '#ffffff' : '#0b0b0b'; }
+function narrow() { return window.innerWidth < 720; }
+
+/** Número en formato es-ES con separador de miles siempre: 1.234,56 */
+function nf(v, d) {
+  if (!isNum(v)) return 'n/d';
+  var s = Math.abs(v).toFixed(d === undefined ? 2 : d), p = s.split('.');
+  p[0] = p[0].replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return (v < 0 && parseFloat(s) !== 0 ? MINUS : '') + p[0] + (p[1] ? ',' + p[1] : '');
+}
+function sgn(v, txt) { return isNum(v) && v > 0 && txt !== 'n/d' ? '+' + txt : txt; }
+function eur(v, d) { return isNum(v) ? nf(v, d === undefined ? 2 : d) + NB + '€' : 'n/d'; }
+function eurS(v, d) { return sgn(v, eur(v, d)); }
+function pct(v, d) { return isNum(v) ? nf(v * 100, d === undefined ? 1 : d) + NB + '%' : 'n/d'; }
+function pctS(v, d) { return sgn(v, pct(v, d)); }
+function btc(v) { return isNum(v) ? nf(v, 8) : 'n/d'; }
+function cls(v) { return !isNum(v) ? 'na' : v > 0 ? 'up' : v < 0 ? 'down' : ''; }
+function arrow(v) { return !isNum(v) ? '' : v > 0 ? '▲' : v < 0 ? '▼' : '•'; }
+function dS(k) {
+  if (!k) return 'n/d';
+  var y = k.substring(0, 4), cur = D && D.meta && D.meta.asOf ? D.meta.asOf.substring(0, 4) : y;
+  return (+k.substring(8, 10)) + NB + MESES[+k.substring(5, 7) - 1] + (y !== cur ? NB + y : '');
+}
+function dL(k) { return k ? (+k.substring(8, 10)) + NB + MESES[+k.substring(5, 7) - 1] + NB + k.substring(0, 4) : 'n/d'; }
+var DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+/** Día de la semana + fecha corta: «jue 29 oct». */
+function dW(k) { return k ? DIAS[new Date(k + 'T12:00:00Z').getUTCDay()] + NB + dS(k) : 'n/d'; }
+/** Rango de fechas corto: «24–25 oct» o «30 sep–2 oct». */
+function dR(a, b) { return a === b ? dS(a) : (a.substring(0, 7) === b.substring(0, 7) ? (+a.substring(8, 10)) + '–' + dS(b) : dS(a) + '–' + dS(b)); }
+function hhmm(t) { var m = String(t || '').match(/(\d{1,2}:\d{2})/); return m ? m[1] : ''; }
+function ppS(v, d) { return isNum(v) ? sgn(v, nf(v * 100, d === undefined ? 2 : d)) + NB + 'pp' : 'n/d'; }
+/** Decimales de las marcas de un eje según el paso entre ellas (todas con los mismos). */
+function stepDec(ticks) { var s = ticks && ticks.length > 1 ? Math.abs(ticks[1].value - ticks[0].value) : 1; return s >= 1 - 1e-9 ? 0 : s >= 0.1 - 1e-9 ? 1 : 2; }
+function period(key) { var ps = (D.perf && D.perf.periods) || []; for (var i = 0; i < ps.length; i++) if (ps[i].key === key) return ps[i]; return null; }
+function emptyBox(title, text) { return '<div class="empty"><b>' + esc(title) + '</b>' + esc(text || '') + '</div>'; }
+function tile(l, v, s) { return '<div class="tile"><div class="l">' + l + '</div><div class="v">' + v + '</div><div class="s">' + (s || '') + '</div></div>'; }
+function stat(l, v, s) { return '<div class="stat"><span>' + l + '</span><b>' + v + '</b><span>' + (s || '') + '</span></div>'; }
+
+/* ===================== Carga ===================== */
+function loadData() {
+  if (busy) return;
+  var btn = el('refresh');
+  busy = true; btn.disabled = true; el('content').classList.add('refetch');
+  function done() { busy = false; btn.disabled = false; el('loading').hidden = true; el('content').classList.remove('refetch'); }
+  function ok(res) {
+    done();
+    try { render(typeof res === 'string' ? JSON.parse(res) : res); lastLoad = Date.now(); }
+    catch (e) { showError(e); }
+  }
+  function fail(e) { done(); showError(e); }
+  if (!(window.google && google.script && google.script.run)) { fail(new Error('google.script.run no está disponible: abre el dashboard desde la URL de la aplicación web.')); return; }
+  google.script.run.withSuccessHandler(ok).withFailureHandler(fail).getDashboardData();
+}
+function showError(e) {
+  var b = el('banner');
+  b.className = 'banner err'; b.hidden = false;
+  b.innerHTML = '<b>No se han podido cargar los datos.</b> ' + esc(e && e.message ? e.message : e) + (D ? ' Se muestran los últimos datos cargados.' : '') +
+    ' <button type="button" class="btn ghost" data-retry="1" style="margin-left:8px">Reintentar</button>';
+  document.body.setAttribute('data-render', 'error');
+}
+
+/* ===================== Render ===================== */
+function render(d) {
+  if (!d || !d.total) throw new Error('La respuesta del servidor está vacía.');
+  D = d;
+  el('content').hidden = false;
+  var errs = [];
+  [renderBanner, renderHero, renderFilters, renderEvo, renderPerf, renderDaily, renderMi, renderBench, renderCrypto, renderFooter].forEach(function (fn) {
+    try { fn(); } catch (e) { errs.push((fn.name || 'bloque') + ': ' + (e && e.message ? e.message : e)); if (window.console) console.error(e); }
+  });
+  var now = new Date();
+  el('updated').textContent = 'Actualizado ' + ('0' + now.getHours()).slice(-2) + ':' + ('0' + now.getMinutes()).slice(-2);
+  if (errs.length) { var b = el('banner'); b.className = 'banner err'; b.hidden = false; b.innerHTML = '<b>Algún bloque no se ha podido pintar.</b> ' + esc(errs.join(' · ')); }
+  fitLabels();
+  document.body.setAttribute('data-render', errs.length ? 'partial' : 'ok');
+}
+
+function renderBanner() {
+  var b = el('banner'), w = D.warnings || [];
+  if (!w.length) { b.hidden = true; b.innerHTML = ''; return; }
+  b.className = 'banner'; b.hidden = false;
+  b.innerHTML = '<b>⚠ ' + (w.length === 1 ? 'Aviso' : w.length + ' avisos') + ' al leer la hoja.</b> ' + w.map(esc).join(' · ');
+}
+
+/* ---------- Cabecera: patrimonio total ---------- */
+function renderHero() {
+  var t = D.total, h = el('hero');
+  if (!t.available) { h.innerHTML = emptyBox('Sin datos de patrimonio', 'No se ha podido leer ni Historico ni Crypto. Mira «Estado de los datos» al final de la página.'); return; }
+  var parts = [];
+  if (t.hasMyInvestor) parts.push({ c: '--mi', l: 'MyInvestor', v: t.myinvestor, w: t.pesoMyInvestor, meta: 'dato del ' + dS(t.miDate) + (!D.mi.hasHistory ? ' · suma de posiciones, sin efectivo' : t.miSource === 'broker' ? ' · oficial del broker' : t.miSource === 'public_markets' ? ' · estimación de mercado' : '') });
+  if (t.hasCripto) parts.push({ c: '--cr', l: 'Cripto', v: t.cripto, w: t.pesoCripto, meta: 'dato del ' + dS(t.crDate) + (hhmm(t.crPriceTime) ? ' ' + hhmm(t.crPriceTime) : '') });
+  var missing = !t.hasCripto ? 'La cripto no está disponible: el total incluye solo MyInvestor.' : !t.hasMyInvestor ? 'MyInvestor no está disponible: el total incluye solo la cripto.' : '';
+  var last = t.last, dline = '';
+  if (last && isNum(last.eur)) dline = '<span class="' + cls(last.eur) + '">' + arrow(last.eur) + ' ' + eurS(last.eur) + ' (' + pctS(last.pct, 2) + ')</span> desde el dato anterior (' + dS(last.from) + ')';
+  var html = '<div><div class="over">Patrimonio total</div><div class="hero-num" id="heroNum">' + eur(t.patrimonio) + '</div><div class="hero-d">' + (dline || esc(missing)) + '</div>';
+  html += '<div class="comp"><div class="stack" role="img" aria-label="Composición del patrimonio">' + parts.map(function (p) { return '<span style="flex:' + Math.max(p.w || 0, 0.0001) + ' 1 0;background:var(' + p.c + ')"></span>'; }).join('') + '</div>';
+  html += '<div class="comp-l">' + parts.map(function (p) {
+    return '<div><div class="k"><i class="sw" style="background:var(' + p.c + ')"></i>' + p.l + '</div><div class="v">' + eur(p.v) + '<small>' + pct(p.w) + '</small></div><div class="m">' + esc(p.meta) + '</div></div>';
+  }).join('') + '</div>' + (dline && missing ? '<div class="m" style="margin-top:8px">' + esc(missing) + '</div>' : '') + '</div></div>';
+
+  var keys = ['7d', '1m', 'ytd', 'inicio'], any = false, partial = false;
+  var tiles = keys.map(function (k) {
+    var p = period(k), x = p && p.total;
+    if (!x || !isNum(x.twr)) return '<div class="t"><div class="l">' + (p ? p.label : k) + '</div><div class="p na">n/d</div><div class="e">sin historial suficiente</div></div>';
+    any = true; if (x.partial) partial = true;
+    return '<div class="t" title="Del ' + dL(x.from) + ' al ' + dL(x.to) + '"><div class="l">' + p.label + (x.partial ? AST : '') + '</div><div class="p ' + cls(x.twr) + '"><i aria-hidden="true">' + arrow(x.twr) + '</i>' + pctS(x.twr, 2) + '</div><div class="e">' + eurS(x.gain) + ' <span class="m">desde ' + dS(x.from) + '</span></div></div>';
+  }).join('');
+  html += '<div><div class="ret">' + tiles + '</div><div class="ret-cap">' + (any ? 'Rentabilidad del patrimonio total sin contar aportaciones (TWR).' + (partial ? ' * Desde el primer registro.' : '') : 'La rentabilidad aparecerá cuando haya al menos dos días de datos.') + '</div></div>';
+  h.innerHTML = html;
+}
+
+/* ---------- Filtro de periodo (afecta a todos los gráficos) ---------- */
+function rangeStart() { var r = D.meta.ranges || {}; return r[state.range] || null; }
+/** Filas del periodo elegido; incluye la última anterior al inicio como punto de partida. */
+function inRange(rows) {
+  var s = rangeStart(); if (!s || !rows.length) return rows;
+  var i = -1; rows.forEach(function (r, n) { if (r.d <= s) i = n; });
+  return i < 0 ? rows : rows.slice(i);
+}
+function renderFilters() {
+  el('rangeSeg').parentNode.hidden = !(D.series && D.series.length);
+  Array.prototype.forEach.call(el('rangeSeg').children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-v') === state.range ? 'true' : 'false'); });
+  var s = rangeStart(), first = D.series && D.series.length ? D.series[0].d : null;
+  el('rangeNote').textContent = s && first && first > s ? 'El historial empieza el ' + dL(first) + ': se muestra completo.' : '';
+}
+
+/* ---------- Gráficos: base común ---------- */
+function palette() {
+  return { surface: cssVar('--surface'), ink: cssVar('--ink'), ink2: cssVar('--ink-2'), muted: cssVar('--muted'), grid: cssVar('--grid'), axis: cssVar('--axis'),
+    mi: cssVar('--mi'), cr: cssVar('--cr'), bench: cssVar('--bench'), good: cssVar('--good'), crit: cssVar('--crit') };
+}
+var crosshair = { id: 'crosshair', beforeDatasetsDraw: function (chart) {
+  var a = chart.tooltip && chart.tooltip.getActiveElements ? chart.tooltip.getActiveElements() : [];
+  if (!a.length) return;
+  var x = a[0].element.x, ca = chart.chartArea, ctx = chart.ctx;
+  ctx.save(); ctx.beginPath(); ctx.moveTo(x, ca.top); ctx.lineTo(x, ca.bottom); ctx.lineWidth = 1; ctx.strokeStyle = cssVar('--axis'); ctx.stroke(); ctx.restore();
+} };
+function chartMsg(id, text) {
+  var cv = el(id), box = cv.parentNode, old = box.querySelector('.nochart');
+  if (old) box.removeChild(old);
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+  cv.style.display = text ? 'none' : '';
+  if (text) { var m = document.createElement('div'); m.className = 'nochart'; m.textContent = text; box.appendChild(m); }
+}
+function draw(id, cfg) {
+  chartMsg(id, '');
+  if (typeof Chart === 'undefined') { chartMsg(id, 'No se ha podido cargar la librería de gráficos (Chart.js). Los datos siguen en las tablas.'); return; }
+  cfg.plugins = [crosshair];
+  charts[id] = new Chart(el(id), cfg);
+}
+/** Marca solo el último punto de cada serie (y los puntos aislados, que sin marca no se verían). */
+function dotAt(ctx) {
+  var a = ctx.dataset.data, i = ctx.dataIndex, has = function (v) { return v !== null && v !== undefined; };
+  if (!has(a[i])) return 0;
+  var last = true; for (var n = i + 1; n < a.length; n++) if (has(a[n])) { last = false; break; }
+  return last || (!has(a[i - 1]) && !has(a[i + 1])) ? 4 : 0;
+}
+function lineSet(label, data, color, extra) {
+  var P = palette(), ds = { label: label, data: data, borderColor: color, backgroundColor: color, borderWidth: 2, tension: 0, borderJoinStyle: 'round', borderCapStyle: 'round',
+    pointRadius: dotAt, pointBackgroundColor: color, pointBorderColor: P.surface, pointBorderWidth: 2,
+    pointHoverRadius: 5, pointHoverBackgroundColor: color, pointHoverBorderColor: P.surface, pointHoverBorderWidth: 2, pointHitRadius: 14, fill: false, spanGaps: false };
+  Object.keys(extra || {}).forEach(function (k) { ds[k] = extra[k]; });
+  return ds;
+}
+function axisEur(v) {
+  var a = Math.abs(v);
+  if (a >= 1e6) return nf(v / 1e6, a % 1e6 ? 1 : 0) + NB + 'M€';
+  if (a >= 10000 && narrow()) return nf(v / 1000, a % 1000 ? 1 : 0) + NB + 'k€';
+  return nf(v, a < 10 && a > 0 ? 2 : 0) + NB + '€';
+}
+function baseOpts(rows, yTick, tip) {
+  var P = palette();
+  return {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: 'index', intersect: false },
+    layout: { padding: { top: 8, right: 10 } },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: P.surface, titleColor: P.ink2, bodyColor: P.ink, footerColor: P.ink2, borderColor: P.axis, borderWidth: 1, padding: 10, cornerRadius: 8,
+        titleFont: { weight: '600', size: 12 }, bodyFont: { weight: '600', size: 12.5 }, footerFont: { weight: '400', size: 11.5 }, footerMarginTop: 6,
+        usePointStyle: true, boxWidth: 14, boxHeight: 6, boxPadding: 6,
+        callbacks: {
+          title: function (items) { return items.length ? dL(rows[items[0].dataIndex].d) : ''; },
+          label: tip.label, footer: tip.footer || function () { return ''; },
+          labelPointStyle: function () { return { pointStyle: 'line', rotation: 0 }; },
+          labelColor: function (c) { return { borderColor: c.dataset.borderColor, backgroundColor: c.dataset.borderColor, borderWidth: 3 }; }
+        }
+      }
+    },
+    scales: {
+      x: { grid: { display: false }, border: { color: P.axis }, ticks: { color: P.muted, maxRotation: 0, autoSkip: true, autoSkipPadding: 22, font: { size: 11.5 } } },
+      y: { grid: { color: P.grid }, border: { display: false }, ticks: { color: P.muted, callback: yTick, maxTicksLimit: 6, font: { size: 11.5 } } }
+    }
+  };
+}
+function niceFloor(v, span) { var step = Math.pow(10, Math.floor(Math.log(Math.max(span, 1)) / Math.LN10)) / 2; return Math.floor(v / step) * step; }
+
+/* ---------- Evolución del patrimonio total (apilado MyInvestor + cripto) ---------- */
+function renderEvo() {
+  var P = palette(), rows = inRange(D.series || []);
+  var hasMi = rows.some(function (r) { return isNum(r.mi); }), hasCr = rows.some(function (r) { return isNum(r.cr); });
+  var seg = el('scaleSeg');
+  if (!rows.length || (!hasMi && !hasCr)) {
+    chartMsg('chEvo', 'Todavía no hay historial de patrimonio.'); el('evoLegend').innerHTML = ''; el('evoTbl').innerHTML = ''; el('evoSub').textContent = ''; seg.hidden = true; return;
+  }
+  seg.hidden = false;
+  var tot = rows.map(function (r) { return r.t; });
+  var lows = rows.map(function (r, i) { return hasMi && isNum(r.mi) ? r.mi : tot[i]; });
+  var hi = Math.max.apply(null, tot), lo = Math.min.apply(null, lows);
+  var auto = hi > 0 && (hi - lo) / hi < 0.15 ? 'fit' : 'zero';
+  var scale = state.scale === 'zero' || state.scale === 'fit' ? state.scale : auto;
+  Array.prototype.forEach.call(seg.children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-v') === scale ? 'true' : 'false'); });
+  var fit = scale === 'fit';
+  el('evoSub').textContent = fit ? 'Eje ajustado: no empieza en 0, para que se vea la variación' : 'Áreas apiladas desde 0: la altura es el patrimonio total';
+  var sets = [];
+  if (hasMi) sets.push(lineSet('MyInvestor', rows.map(function (r) { return r.mi; }), P.mi, { stack: 's', fill: fit ? false : 'origin', backgroundColor: rgba(P.mi, 0.16), k: 'mi' }));
+  if (hasCr) sets.push(lineSet('Cripto', rows.map(function (r) { return r.cr; }), P.cr, { stack: 's', fill: hasMi ? '-1' : (fit ? false : 'origin'), backgroundColor: rgba(P.cr, 0.26), k: 'cr' }));
+  var opts = baseOpts(rows, axisEur, {
+    label: function (c) { var r = rows[c.dataIndex], fill = c.dataset.k === 'mi' ? r.miFill : r.crFill; return ' ' + eur(c.parsed.y) + '  ' + c.dataset.label + (fill ? ' †' : ''); },
+    footer: function (items) {
+      var r = rows[items[0].dataIndex], f = ['Total: ' + eur(r.t)];
+      if (isNum(r.f) && isNum(r.e)) f.push('MyInvestor: fondos ' + eur(r.f, 0) + ' · acciones ' + eur(r.a, 0) + ' · efectivo ' + eur(r.e, 0));
+      if (r.miFill || r.crFill) f.push('† último valor conocido (sin dato ese día)');
+      return f;
+    }
+  });
+  opts.scales.y.stacked = true;
+  opts.scales.x.stacked = false;
+  if (fit) { var pad = (hi - lo) * 0.18 || hi * 0.02; opts.scales.y.min = Math.max(0, niceFloor(lo - pad, hi - lo + pad)); opts.scales.y.ticks.includeBounds = false; } else opts.scales.y.beginAtZero = true;
+  draw('chEvo', { type: 'line', data: { labels: rows.map(function (r) { return dS(r.d); }), datasets: sets }, options: opts });
+
+  var lastRow = rows[rows.length - 1], crStart = null;
+  rows.forEach(function (r) { if (!crStart && isNum(r.cr)) crStart = r.d; });
+  el('evoLegend').innerHTML = (hasMi ? '<span><i class="sw' + (fit ? ' line' : '') + '" style="background:var(--mi);border-color:var(--mi)"></i>MyInvestor <b>' + eur(lastRow.mi, 0) + '</b></span>' : '') +
+    (hasCr ? '<span><i class="sw" style="background:var(--cr)"></i>Cripto <b>' + eur(lastRow.cr, 0) + '</b></span>' : '') +
+    (hasMi && hasCr ? '<span class="m">' + (crStart && crStart > rows[0].d ? 'Cripto registrada desde el ' + dS(crStart) + ' · e' : 'E') + 'l borde superior es el total</span>' : '');
+  var body = rows.slice().reverse().slice(0, 400).map(function (r) {
+    return '<tr><td class="l">' + dL(r.d) + '</td><td>' + (isNum(r.mi) ? eur(r.mi) + (r.miFill ? ' †' : '') : '–') + '</td><td>' + (isNum(r.cr) ? eur(r.cr) + (r.crFill ? ' †' : '') : '–') + '</td><td><b>' + eur(r.t) + '</b></td></tr>';
+  }).join('');
+  el('evoTbl').innerHTML = '<thead><tr><th class="l">Fecha</th><th>MyInvestor</th><th>Cripto</th><th>Total</th></tr></thead><tbody>' + body + '</tbody>';
+  el('evoTblNote').textContent = '† Sin dato ese día: se arrastra el último valor conocido de ese bloque.';
+}
+
+/* ---------- Rentabilidad sin aportaciones ---------- */
+function perfCell(x) {
+  if (!x || !isNum(x.twr)) return '<td class="na" title="Sin historial suficiente">n/d</td>';
+  var tip = 'Del ' + dL(x.from) + ' al ' + dL(x.to) + ' · valor ' + eur(x.startValue) + ' → ' + eur(x.endValue) + ' · flujos ' + eurS(x.flows) + (isNum(x.dietz) ? ' · Dietz modificado ' + pctS(x.dietz, 2) : '') + (isNum(x.annualized) ? ' · anualizada ' + pctS(x.annualized, 2) : '');
+  return '<td title="' + esc(tip) + '"><b class="' + cls(x.twr) + '">' + pctS(x.twr, 2) + '</b>' + (x.partial ? AST : '') + '<span class="m">' + eurS(x.gain) + '</span></td>';
+}
+function renderPerf() {
+  var ps = (D.perf.periods || []).filter(function (p) { return (p.key !== '3m' && p.key !== '1a') || (p.total && !p.total.partial && isNum(p.total.twr)); });
+  var t = el('perfTbl'), notes = [], partial = false, firsts = {};
+  if (!ps.length || !ps.some(function (p) { return p.total && isNum(p.total.twr); })) {
+    t.innerHTML = ''; el('perfNotes').innerHTML = emptyBox('Sin historial suficiente', 'Hacen falta al menos dos días de datos para calcular rentabilidades.');
+  } else {
+    var both = D.mi.hasHistory && D.crypto.available;
+    var cols = [['total', 'Total', '--ink-2'], ['mi', 'MyInvestor', '--mi'], ['cr', 'Cripto', '--cr']].filter(function (c) { return c[0] === 'total' ? both : c[0] === 'mi' ? D.mi.hasHistory : D.crypto.available; });
+    if (!cols.length) cols = [['total', 'Total', '--ink-2']];
+    t.innerHTML = '<thead><tr><th class="l">Periodo</th>' + cols.map(function (c) { return '<th><i style="background:var(' + c[2] + ')"></i>' + c[1] + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      ps.map(function (p) {
+        cols.forEach(function (c) { var x = p[c[0]]; if (x && x.partial && isNum(x.twr)) { partial = true; firsts[c[1]] = x.from; } });
+        return '<tr><td class="l">' + p.label + '<span class="m">' + (p.total && p.total.from ? 'desde ' + dS(p.total.from) : '') + '</span></td>' + cols.map(function (c) { return perfCell(p[c[0]]); }).join('') + '</tr>';
+      }).join('') + '</tbody>';
+    if (partial) notes.push('* El historial es más corto que el periodo: se calcula desde el primer registro (' + Object.keys(firsts).map(function (k) { return k + ' ' + dS(firsts[k]); }).join(', ') + ').');
+    (D.perf.notes || []).forEach(function (n) { notes.push(n.replace(/(\d{4}-\d{2}-\d{2})/g, function (k) { return dL(k); })); });
+    el('perfNotes').innerHTML = notes.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('');
+  }
+  el('method').innerHTML =
+    '<p><b>Rentabilidad ponderada por tiempo (TWR).</b> Entre cada dos valoraciones consecutivas se calcula <code>r = (V final − V inicial − flujos) / (V inicial + flujos ponderados)</code> (Dietz modificado: cada flujo pesa por la fracción del tramo que estuvo dentro) y los tramos se encadenan: <code>(1 + r₁) · (1 + r₂) · … − 1</code>. Así una aportación o una retirada no cuenta como ganancia ni como pérdida.</p>' +
+    '<p><b>Euros.</b> La cifra pequeña es la ganancia de mercado del periodo: variación del valor menos aportaciones netas. Al pasar el ratón por una celda se ven las fechas exactas, los flujos y el Dietz modificado del periodo completo (ponderado por dinero).</p>' +
+    '<p><b>Flujos.</b> MyInvestor: aportaciones y retiradas de la pestaña Flujos (y la columna de aportaciones de Historico, sin duplicar). Cripto: compras y ventas de Crypto_Movs; si no cuadran con el cambio de cantidad, el flujo se deduce de ese cambio al precio del día. Con una sola moneda, la TWR de la cripto es prácticamente la variación del precio.</p>' +
+    '<p><b>Total.</b> MyInvestor + cripto. Cada bloque arrastra su último valor conocido los días sin dato (forward-fill); un bloque que empieza a registrarse más tarde entra como aportación, no como ganancia. Todos los periodos terminan en el último dato del dashboard (' + dL(D.meta.asOf) + ').</p>';
+}
+
+/* ---------- Rendimiento diario y drivers (v4). Todo llega calculado de Code.gs: aquí solo se elige y se pinta ---------- */
+function aName(id) { var a = assetBy[id]; return a ? a.short : id; }
+/** Ventana elegida: «1 día» (el día seleccionado), 20 días, 3 meses o YTD. */
+function dayWin() {
+  var dl = D.daily;
+  if (state.dwin === '1d') {
+    if (!state.dday || !dl.days[state.dday]) state.dday = dl.picks[dl.picks.length - 1];
+    return dl.days[state.dday] || dl.windows['1d'];
+  }
+  return dl.windows[state.dwin] || dl.windows['20d'];
+}
+/** Filas del gráfico diario: las de la ventana; con «1 día», las de los días que se pueden elegir. */
+function dayRows(W) { var dl = D.daily; return state.dwin === '1d' ? dl.rows.slice(dl.rows.length - dl.picks.length) : dl.rows.slice(W.i0); }
+function selAsset(W) { return W.mi && W.mi.items.some(function (x) { return x.id === state.dsel; }) ? state.dsel : W.sel; }
+function gapTxt(g) { return g ? g.label + ' (' + dR(g.from, g.to) + ')' : ''; }
+function nodetTxt(n) {
+  if (!n) return '';
+  return n.motivo === 'descuadre' ? 'sin detalle por posición: el ' + dS(n.d) + ' el Total de Historico no cuadra con posiciones + efectivo (' + eurS(n.eur) + '), así que no se reparte por activo'
+    : 'sin detalle por posición: no hay foto de posiciones del ' + dS(n.d);
+}
+function movTxt(x) { return x === 'igual' || x === 'sinfila' ? ' (sin VL nuevo)' : x === 'antiguo' ? ' (VL más antiguo: ignorado)' : x === 'corregido' ? ' (VL corregido)' : ''; }
+/** Parte una lista en líneas cortas para el tooltip (en móvil caben menos elementos por línea). */
+function lines(prefix, items, n) { var out = []; for (var i = 0; i < items.length; i += n) out.push((i ? '   ' : prefix) + items.slice(i, i + n).join(' · ')); return out; }
+
+function renderDaily() {
+  var dl = D.daily, head = el('dayHead'), ok = !!(dl && dl.available);
+  head.innerHTML = '<h2><i style="background:var(--ink-2)"></i>Rendimiento diario</h2>';
+  el('dayEmpty').hidden = ok; el('dayBody').hidden = !ok;
+  if (!ok) {
+    ['chDay', 'chCum', 'chB100'].forEach(function (id) { chartMsg(id, ''); });
+    el('dayEmpty').innerHTML = emptyBox('Sin rendimiento diario', (dl && dl.reason) || 'Hacen falta al menos dos días de datos.');
+    return;
+  }
+  assetBy = {}; dl.assets.forEach(function (a) { assetBy[a.id] = a; });
+  if (['1d', '20d', '3m', 'ytd'].indexOf(state.dwin) < 0) state.dwin = '20d';
+  if (state.dunit !== 'eur') state.dunit = 'pct';
+  var last = dl.rows[dl.rows.length - 1], m = last.mi, chips = [];
+  if (m) head.innerHTML += '<span class="big">' + pctS(m.detail ? m.pct : m.h, 2) + ' · ' + eurS(m.detail ? m.e : m.gainH) + '</span><span class="w">MyInvestor el ' + dW(last.d) + ', solo mercado</span>';
+  chips.push('<span class="chip"><i class="dot" style="background:var(--' + (m && m.src === 'broker' ? 'good' : 'warn') + ')"></i>Último día: ' + (m && m.src === 'broker' ? 'confirmado (broker)' : 'estimado') + '</span>');
+  if (dl.detailFrom) chips.push('<span class="chip">Detalle por posición: ' + dS(dl.detailFrom) + ' – ' + dS(dl.detailTo) + '</span>');
+  head.innerHTML += '<div class="chips">' + chips.join('') + '</div>';
+  renderDayAll();
+}
+function renderDayAll() { renderDayFilters(); renderDayChart(); renderDrivers(); renderB100(); }
+
+function renderDayFilters() {
+  var dl = D.daily, W = dayWin(), notes = [];
+  Array.prototype.forEach.call(el('dwinSeg').children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-v') === state.dwin ? 'true' : 'false'); });
+  Array.prototype.forEach.call(el('dunitSeg').children, function (b) { b.setAttribute('aria-pressed', b.getAttribute('data-v') === state.dunit ? 'true' : 'false'); });
+  if (state.dwin === '1d') notes.push(dW(W.to) + ' frente al ' + dW(W.from) + ' · pulsa una barra para ver otro día');
+  else notes.push('Del ' + dL(W.from) + ' al ' + dL(W.to) + ' · ' + W.n + ' días con dato');
+  if (W.partial) notes.push('el historial empieza el ' + dL(dl.first) + ': se calcula desde ahí*');
+  if (state.dwin !== '1d' && dl.detailFrom && (W.partial || W.from < dl.detailFrom || (W.mi && W.mi.nod.n)))
+    notes.push('el detalle diario por posición solo cubre del ' + dS(dl.detailFrom) + ' al ' + dS(dl.detailTo) + ' (~1 mes): en periodos largos lo anterior se ve solo como total');
+  el('dwinNote').textContent = notes.join(' · ');
+}
+
+function renderDayChart() {
+  var dl = D.daily, W = dayWin(), P = palette(), rows = dayRows(W), eurMode = state.dunit === 'eur', one = state.dwin === '1d';
+  var cMi = P.mi, ink = P.ink, cr = P.cr;
+  var bars = rows.map(function (r) { var m = r.mi; return !m ? null : eurMode ? (m.detail ? m.e : m.gainH) : (m.detail ? m.pct : m.h) * 100; });
+  var soft = currentTheme() === 'dark' ? 0.6 : 0.42;   // estimado: más claro que confirmado (en oscuro, sin perderse en el fondo)
+  var fills = rows.map(function (r) { var a = r.mi && r.mi.src === 'broker' ? 1 : soft; if (one && r.d !== W.to) a *= 0.35; return rgba(cMi, a); });
+  var tot = rows.map(function (r) { return eurMode ? r.tot.e : (isNum(r.tot.pct) ? r.tot.pct * 100 : null); });
+  var btc = rows.map(function (r) { return !r.btc ? null : eurMode ? r.btc.e : (isNum(r.tot.cBtc) ? r.tot.cBtc * 100 : null); });
+  var wk = rows.map(function (r) { return !!(r.btc && r.btc.gap); });
+  var hasBtc = btc.some(isNum), hasWk = wk.some(Boolean), hasEst = rows.some(function (r) { return r.mi && r.mi.src !== 'broker'; });
+  var sets = [
+    { type: 'bar', label: 'MyInvestor', data: bars, backgroundColor: fills, hoverBackgroundColor: fills, borderRadius: 4, borderSkipped: 'start', maxBarThickness: 24, barPercentage: 0.78, categoryPercentage: 0.9, order: 3, k: 'mi' },
+    { type: 'line', label: 'Total con BTC', data: tot, showLine: false, pointStyle: 'line', pointRadius: narrow() ? 6 : 9, pointHoverRadius: narrow() ? 7 : 10,
+      borderColor: ink, backgroundColor: ink, pointBorderColor: ink, pointBorderWidth: 3, pointHoverBorderWidth: 3, borderWidth: 3, order: 1, k: 'tot' }
+  ];
+  if (hasBtc) sets.push({ type: 'line', label: 'BTC', data: btc, borderColor: cr, backgroundColor: cr, borderWidth: 2, tension: 0, spanGaps: false, order: 2, k: 'btc',
+    pointStyle: function (c) { return wk[c.dataIndex] ? 'rectRot' : 'circle'; }, pointRadius: function (c) { return wk[c.dataIndex] ? 6 : 2.5; },
+    pointHoverRadius: 6, pointBackgroundColor: cr, pointBorderColor: P.surface, pointBorderWidth: function (c) { return wk[c.dataIndex] ? 2 : 1; }, pointHitRadius: 12 });
+  var yTick = eurMode ? function (v) { return sgn(v, axisEur(v)); } : function (v, i, t) { return sgn(v, nf(v, stepDec(t))) + NB + '%'; };
+  var opts = baseOpts(rows, yTick, {
+    label: function (c) {
+      var r = rows[c.dataIndex], k = c.dataset.k, m = r.mi, b = r.btc;
+      if (k === 'mi') return m ? ' ' + pctS(m.detail ? m.pct : m.h, 2) + ' · ' + eurS(m.detail ? m.e : m.gainH) + '  MyInvestor' + (m.detail ? '' : ' (sin detalle)') : '';
+      if (k === 'tot') return ' ' + pctS(r.tot.pct, 2) + ' · ' + eurS(r.tot.e) + '  Total con BTC';
+      return b ? ' ' + ppS(r.tot.cBtc, 3) + ' · ' + eurS(b.e) + '  BTC (' + pctS(b.r, 2) + ' su precio' + (b.gap ? ', ' + b.gap.label : '') + ')' : '';
+    },
+    footer: function (items) {
+      var r = rows[items[0].dataIndex], m = r.mi, f = [], navs = [], n = narrow() ? 2 : 3;
+      if (r.btc && r.btc.gap) f.push('◆ BTC ' + gapTxt(r.btc.gap) + ': ese movimiento se suma a este día');
+      if (m && m.gap) f.push('MyInvestor ' + gapTxt(m.gap));
+      if (m && !m.detail) f.push(nodetTxt(m.nodet));
+      if (m && m.detail) {
+        Object.keys(m.a).forEach(function (id) { var x = m.a[id]; if (x.nav !== undefined) navs.push(aName(id) + ' ' + (x.nav ? dS(x.nav) : 'sin fecha') + (x.est ? ' est.' : '') + movTxt(x.mv)); });
+        var top = Object.keys(m.a).sort(function (a, b) { return Math.abs(m.a[b].e) - Math.abs(m.a[a].e); }).slice(0, 3).map(function (id) { return aName(id) + ' ' + eurS(m.a[id].e); });
+        f = f.concat(lines('VL usado: ', navs, n));
+        f.push('Acciones: precio del ' + dS(r.d) + ' en €' + (isNum(m.fx) ? ' (EUR/USD ' + nf(m.fx, 4) + ')' : ''));
+        f = f.concat(lines('Más movimiento: ', top, n));
+      }
+      if (m) f.push((m.src === 'broker' ? 'Confirmado por el broker' : 'Estimado: ' + (m.why.join('; ') || 'precios de mercado')));
+      return f;
+    }
+  });
+  opts.plugins.tooltip.callbacks.title = function (items) { var r = rows[items[0].dataIndex]; return dW(r.d) + (r.days > 1 ? ' (desde el ' + dW(r.prev) + ')' : ''); };
+  opts.scales.y.grid.color = function (c) { return c.tick && c.tick.value === 0 ? P.axis : P.grid; };
+  opts.onClick = function (evt, act, chart) {
+    var pts = chart.getElementsAtEventForMode(evt, 'index', { intersect: false }, false); if (!pts.length) return;
+    var r = rows[pts[0].index]; if (!D.daily.days[r.d]) return;
+    state.dwin = '1d'; state.dday = r.d; remember('dwin', '1d'); renderDayAll();
+  };
+  opts.onHover = function (evt, act, chart) { chart.canvas.style.cursor = act.length ? 'pointer' : 'default'; };
+  draw('chDay', { type: 'bar', data: { labels: rows.map(function (r) { return dS(r.d); }), datasets: sets }, options: opts });
+
+  el('daySub').textContent = eurMode ? 'Euros ganados o perdidos cada día por el movimiento de los precios (sin aportaciones)' : '% sobre el patrimonio del día anterior (sin aportaciones); BTC, en puntos del total con BTC';
+  el('dayLegend').innerHTML = '<span><i class="sw" style="background:var(--mi)"></i>MyInvestor · confirmado (broker)</span>' +
+    (hasEst ? '<span><i class="sw soft" style="background:var(--mi)"></i>estimado (public_markets o VL estimado)</span>' : '') +
+    '<span><i class="sw tick" style="border-color:var(--ink)"></i>Total con BTC</span>' +
+    (hasBtc ? '<span><i class="sw line" style="border-color:var(--cr)"></i>BTC, aparte (lo que aporta al total)</span>' : '') +
+    (hasWk ? '<span><i class="sw dia" style="background:var(--cr)"></i>incluye fin de semana</span>' : '');
+  var anyBtc = dl.rows.some(function (r) { return r.btc; });
+  var notes = ['<p><b>Cómo se reparte cada día.</b> Solo efecto mercado: en cada posición, unidades del día anterior × cambio de precio. Las aportaciones de los jueves (caja → fondo) cambian unidades y caja, no la barra. Las acciones van con su precio del día en euros (en GOOG y MA incluye el efecto del dólar). <b>Cada fondo se mueve el día en que aparece un valor liquidativo nuevo (nav_date):</b> los irlandeses publican con un día de retraso, así que la barra de un día junta las acciones de ese día y los fondos con el VL anterior, sin contar nada dos veces ni mezclar saltos; un día sin VL nuevo, el fondo aporta 0. El tooltip enseña el VL usado por cada fondo. Barras claras = estimado (public_markets o VL estimado); oscuras = confirmado por el broker.</p>'];
+  if (anyBtc) notes.push('<p><b>BTC va aparte</b> y no se mezcla con los drivers de MyInvestor. La hoja no tiene filas de sábado ni domingo: el movimiento del BTC del fin de semana se suma al lunes, marcado con ◆ «incluye fin de semana» (y lo mismo con cualquier día sin fila); no se inventan barras para esos días.</p>');
+  if (W.mi) W.mi.nod.days.forEach(function (x) { notes.push('<p>' + dW(x.d) + ': ' + esc(nodetTxt(x.nodet)) + '; esa barra sale del total de Historico (' + eurS(x.eur) + ').</p>'); });
+  el('dayNote').innerHTML = notes.join('');
+
+  el('dayTbl').innerHTML = '<thead><tr><th class="l">Fecha</th><th class="l">Estado</th><th>MyInvestor</th><th class="h-sm">%</th><th>BTC</th><th>Total con BTC</th><th class="h-sm">%</th><th class="h-sm">Residuo</th><th class="l">Notas</th></tr></thead><tbody>' +
+    rows.slice().reverse().map(function (r) {
+      var m = r.mi, b = r.btc, nt = [];
+      if (b && b.gap) nt.push('BTC ' + gapTxt(b.gap));
+      if (m && m.gap) nt.push('MyInvestor ' + gapTxt(m.gap));
+      if (m && !m.detail) nt.push(nodetTxt(m.nodet));
+      if (m && m.why.length && m.src !== 'broker') nt.push(m.why.join('; '));
+      return '<tr><td class="l">' + dW(r.d) + '</td><td class="l">' + (m ? '<span class="pill' + (m.src === 'broker' ? '' : ' est') + '">' + (m.src === 'broker' ? 'confirmado' : 'estimado') + '</span>' : '–') + '</td>' +
+        '<td class="' + (m ? cls(m.detail ? m.e : m.gainH) : '') + '">' + (m ? eurS(m.detail ? m.e : m.gainH) : '–') + '</td><td class="h-sm">' + (m ? pctS(m.detail ? m.pct : m.h, 2) : '–') + '</td>' +
+        '<td>' + (b ? eurS(b.e) : '–') + '</td><td class="' + cls(r.tot.e) + '"><b>' + eurS(r.tot.e) + '</b></td><td class="h-sm">' + pctS(r.tot.pct, 2) + '</td>' +
+        '<td class="h-sm">' + (m && m.detail ? eurS(m.resE) : '–') + '</td><td class="nt">' + esc(nt.join(' · ')) + '</td></tr>';
+    }).join('') + '</tbody>';
+}
+
+function drvRow(x, mx, sel) {
+  var w = Math.min(50, Math.abs(x.pp) / mx * 50), cl = (x.pp >= 0 ? 'p' : 'n') + (x.k === 'nod' || x.k === 'res' ? ' g' : ''), name, meta;
+  if (x.k === 'a') { name = aName(x.id); meta = 'peso ' + pct(x.w, 1) + ' · ' + pctS(x.r, 2); }
+  else if (x.k === 'cash') { name = 'Efectivo'; meta = 'peso ' + pct(x.w, 1) + ' · rinde 0 %'; }
+  else if (x.k === 'nod') { name = 'Sin detalle por posición'; meta = x.n + (x.n === 1 ? ' día' : ' días') + ': solo el total de Historico'; }
+  else { name = 'Residuo (sin explicar)'; meta = 'TWR de Historico − suma'; }
+  var open = x.k === 'a' ? '<button type="button" class="nm" data-sel="' + esc(x.id) + '" aria-pressed="' + (x.id === sel ? 'true' : 'false') + '" title="Destacar ' + esc(name) + ' en los gráficos">' : '<div class="nm fixed">';
+  return open + '<b>' + esc(name) + '</b><span>' + meta + '</span>' + (x.k === 'a' ? '</button>' : '</div>') +
+    '<div class="tr" title="' + esc(name + ': ' + ppS(x.pp, 3) + ' · ' + eurS(x.eur)) + '">' + (w > 0 ? '<i class="' + cl + '" style="width:' + w + '%"></i>' : '') + '</div>' +
+    '<div class="v"><b class="' + cls(x.pp) + '">' + ppS(x.pp, x.k === 'cash' ? 2 : 3) + '</b><span>' + eurS(x.eur) + '</span></div>';
+}
+
+function renderDrivers() {
+  var W = dayWin(), m = W.mi, box = el('drv'), sel = selAsset(W), one = state.dwin === '1d';
+  el('drvSub').textContent = (one ? dW(W.to) : W.label + ' · del ' + dS(W.from) + ' al ' + dS(W.to)) + ' · contribución = peso del día anterior × rendimiento del día' + (one ? '' : ', enlazada (Carino)');
+  if (!m) {
+    box.innerHTML = emptyBox('Sin datos de MyInvestor en el periodo', 'Hace falta Historico (o posiciones) en al menos dos días.');
+    el('cumBox').hidden = true; chartMsg('chCum', ''); el('drvNote').innerHTML = ''; el('drvTbl').innerHTML = ''; return;
+  }
+  var mx = Math.max.apply(null, m.bars.map(function (x) { return Math.abs(x.pp); }).concat(W.btc ? [Math.abs(W.btc.pp)] : []).concat([1e-9]));
+  var html = '<div class="sumline"><span>MyInvestor <b class="' + cls(m.twr) + '">' + pctS(m.twr, 2) + '</b> · ' + eurS(m.gain) + '</span><span>Suma de contribuciones <b>' + pctS(m.sum, 2) + '</b></span><span>Residuo <b>' + ppS(m.res.pp, 3) + '</b> · ' + eurS(m.res.eur) + '</span></div>';
+  var anyBtc = D.daily.rows.some(function (r) { return r.btc; });
+  html += '<div class="drv">' + m.bars.map(function (x) { return drvRow(x, mx, sel); }).join('') + (anyBtc ? '<div class="sep"></div><div class="cap">Fuera de MyInvestor, sobre el total con BTC (no se mezcla con lo de arriba)</div>' : '');
+  if (W.btc) {
+    var wb = Math.min(50, Math.abs(W.btc.pp) / mx * 50);
+    html += '<div class="nm fixed"><b>BTC</b><span>' + pctS(W.btc.r, 2) + ' su precio' + (W.btc.nGap ? ' · ' + W.btc.nGap + ' con fin de semana' : '') + '</span></div>' +
+      '<div class="tr">' + (wb > 0 ? '<i class="' + (W.btc.pp >= 0 ? 'p' : 'n') + '" style="width:' + wb + '%;background:var(--cr)"></i>' : '') + '</div>' +
+      '<div class="v"><b class="' + cls(W.btc.pp) + '">' + ppS(W.btc.pp, 3) + '</b><span>' + eurS(W.btc.eur) + '</span></div>';
+  }
+  if (anyBtc) html += '<div class="nm fixed"><b>Total con BTC</b><span>MyInvestor ' + ppS(W.tot.mi, 2) + ' + BTC ' + ppS(W.tot.btc, 2) + '</span></div><div class="tr"></div>' +
+    '<div class="v"><b class="' + cls(W.tot.twr) + '">' + pctS(W.tot.twr, 2) + '</b><span>' + eurS(W.tot.gain) + '</span></div>';
+  html += '</div>';
+  box.innerHTML = html;
+  renderCum(W, sel);
+
+  var notes = [];
+  notes.push('<p><b>Cuadre.</b> Cada día, contribución de un activo = su peso del día anterior × su rendimiento del día; sumadas dan el rendimiento del día. Para ' + (one ? 'un día no hace falta enlazar' : 'el periodo se enlazan con Carino (cada día pesa ln(1+r)/r frente a ln(1+R)/R), así que suman exactamente la TWR del periodo') +
+    '. Lo que no explican las posiciones (redondeos, efectivo que no cuadra con las unidades compradas) queda como <b>residuo: ' + ppS(m.res.pp, 3) + ' (' + eurS(m.res.eur) + ')</b>. La caja cuenta como un activo más que rinde 0 %.</p>');
+  m.res.days.forEach(function (x) { notes.push('<p>Residuo de ' + eurS(x.eur) + ' el ' + dW(x.d) + (x.desc ? ': la hoja no cuadra ese tramo (Historico − posiciones − efectivo: ' + eurS(x.desc.prev) + ' → ' + eurS(x.desc.cur) + ')' : '') + '.</p>'); });
+  if (m.nod.n) notes.push('<p>' + m.nod.n + (m.nod.n === 1 ? ' día' : ' días') + ' sin detalle por posición (' + m.nod.days.map(function (x) { return dS(x.d); }).join(', ') + '): su rentabilidad (' + ppS(m.nod.pp, 2) + ', ' + eurS(m.nod.eur) + ') sale del total de Historico y no se reparte por activo.</p>');
+  el('drvNote').innerHTML = notes.join('');
+  el('drvTbl').innerHTML = '<thead><tr><th class="l">Activo</th><th>Peso medio</th><th>Rendimiento</th><th>Contribución</th><th>Euros</th></tr></thead><tbody>' +
+    m.bars.map(function (x) {
+      var name = x.k === 'a' ? aName(x.id) + ' (' + x.id + ')' : x.k === 'cash' ? 'Efectivo' : x.k === 'nod' ? 'Sin detalle por posición' : 'Residuo (sin explicar)';
+      return '<tr><td class="l">' + esc(name) + '</td><td>' + (isNum(x.w) ? pct(x.w, 1) : '–') + '</td><td>' + (isNum(x.r) ? pctS(x.r, 2) : '–') + '</td><td>' + ppS(x.pp, 3) + '</td><td>' + eurS(x.eur) + '</td></tr>';
+    }).join('') +
+    '<tr><td class="l"><b>MyInvestor (suma)</b></td><td></td><td><b>' + pctS(m.twr, 2) + '</b></td><td><b>' + ppS(m.sum, 3) + '</b></td><td><b>' + eurS(m.gain) + '</b></td></tr>' +
+    (W.btc ? '<tr><td class="l">BTC (sobre el total con BTC)</td><td></td><td>' + pctS(W.btc.r, 2) + '</td><td>' + ppS(W.btc.pp, 3) + '</td><td>' + eurS(W.btc.eur) + '</td></tr>' : '') +
+    (anyBtc ? '<tr><td class="l">Total con BTC</td><td></td><td>' + pctS(W.tot.twr, 2) + '</td><td>' + ppS(W.tot.twr, 3) + '</td><td>' + eurS(W.tot.gain) + '</td></tr>' : '') + '</tbody>';
+}
+
+function renderCum(W, sel) {
+  var c = W.cum, P = palette();
+  el('cumBox').hidden = !c;
+  if (!c) { chartMsg('chCum', ''); el('cumLegend').innerHTML = ''; return; }
+  var rows = c.d.map(function (d) { return { d: d }; }), sets = [], gray = rgba(P.muted, 0.5), x100 = function (a) { return a.map(function (v) { return isNum(v) ? v * 100 : null; }); };
+  D.daily.assets.forEach(function (a) { if (a.id !== sel && c.a[a.id]) sets.push(lineSet(a.short, x100(c.a[a.id]), gray, { borderWidth: 1.25, pointRadius: 0, pointHoverRadius: 3, k: a.id, order: 3 })); });
+  if (c.a[sel]) sets.push(lineSet(aName(sel), x100(c.a[sel]), P.mi, { borderWidth: 2.5, k: sel, order: 1 }));
+  sets.push(lineSet('MyInvestor (suma)', x100(c.mi), P.ink, { borderWidth: 2, borderDash: [5, 4], k: 'mi', order: 2 }));
+  var opts = baseOpts(rows, function (v, i, t) { return sgn(v, nf(v, stepDec(t))); }, { label: function (x) { return ' ' + sgn(x.parsed.y, nf(x.parsed.y, 3)) + NB + 'pp  ' + x.dataset.label; } });
+  opts.plugins.tooltip.itemSort = function (a, b) { return b.parsed.y - a.parsed.y; };
+  opts.scales.y.grid.color = function (t) { return t.tick && t.tick.value === 0 ? P.axis : P.grid; };
+  draw('chCum', { type: 'line', data: { labels: c.d.map(dS), datasets: sets }, options: opts });
+  var n = c.d.length - 1;
+  el('cumLegend').innerHTML = '<span><i class="sw line" style="border-color:var(--mi)"></i>' + esc(aName(sel)) + ' <b>' + ppS(c.a[sel] ? c.a[sel][n] : null, 2) + '</b></span>' +
+    '<span><i class="sw dash" style="border-color:var(--ink)"></i>MyInvestor, suma <b>' + pctS(c.mi[n], 2) + '</b></span><span><i class="sw line" style="border-color:var(--muted)"></i>resto de activos</span><span class="m">en puntos; pulsa un activo para destacarlo</span>';
+}
+
+function renderB100() {
+  var W = dayWin(), x = W.idx, P = palette(), sel = selAsset(W), dl = D.daily;
+  el('b100Sub').textContent = '100 = ' + dL(x.d[0]) + ' · ' + (state.dwin === '1d' ? 'rendimiento de ese día' : 'rendimiento acumulado en el periodo, sin aportaciones');
+  el('b100Warn').innerHTML = '<b>⚠ Esta vista enseña rendimiento, no peso.</b> Que una línea suba o caiga mucho no significa que ese activo haya movido mucho la cartera: una acción que pesa un 4 % puede caer un 13 % y restar solo medio punto. Lo que suma o resta cada activo está en «Qué ha movido MyInvestor».';
+  var rows = x.d.map(function (d) { return { d: d }; }), sets = [], gray = rgba(P.muted, 0.55), lastOf = function (a) { for (var i = a.length - 1; i >= 0; i--) if (isNum(a[i])) return a[i]; return null; };
+  dl.assets.forEach(function (a) { if (a.id !== sel && x.a[a.id] && x.a[a.id].some(isNum)) sets.push(lineSet(a.short, x.a[a.id], gray, { borderWidth: 1.25, pointRadius: 0, pointHoverRadius: 3, k: a.id, order: 4 })); });
+  if (x.btc) sets.push(lineSet(dl.btcAsset || 'BTC', x.btc, P.cr, { borderWidth: 2, borderDash: [5, 4], k: 'btc', order: 3 }));
+  if (x.a[sel]) sets.push(lineSet(aName(sel), x.a[sel], P.mi, { borderWidth: 2.5, k: sel, order: 1 }));
+  if (x.mi) sets.push(lineSet('MyInvestor', x.mi, P.ink, { borderWidth: 2.5, k: 'mi', order: 2 }));
+  if (!sets.length) { chartMsg('chB100', 'No hay series que comparar en este periodo.'); el('b100Legend').innerHTML = ''; el('b100Pick').innerHTML = ''; el('b100Note').innerHTML = ''; el('b100Tbl').innerHTML = ''; return; }
+  var opts = baseOpts(rows, function (v, i, t) { return nf(v, stepDec(t)); }, { label: function (c) { return ' ' + nf(c.parsed.y, 2) + '  ' + c.dataset.label; } });
+  opts.plugins.tooltip.itemSort = function (a, b) { return b.parsed.y - a.parsed.y; };
+  opts.scales.y.grid.color = function (t) { return t.tick && t.tick.value === 100 ? P.axis : P.grid; };
+  draw('chB100', { type: 'line', data: { labels: x.d.map(dS), datasets: sets }, options: opts });
+  el('b100Legend').innerHTML = (x.mi ? '<span><i class="sw line" style="border-color:var(--ink)"></i>MyInvestor <b>' + nf(lastOf(x.mi), 1) + '</b></span>' : '') +
+    (x.a[sel] ? '<span><i class="sw line" style="border-color:var(--mi)"></i>' + esc(aName(sel)) + ' <b>' + nf(lastOf(x.a[sel]), 1) + '</b></span>' : '') +
+    (x.btc ? '<span><i class="sw dash" style="border-color:var(--cr)"></i>' + esc(dl.btcAsset || 'BTC') + ' <b>' + nf(lastOf(x.btc), 1) + '</b></span>' : '') +
+    '<span><i class="sw line" style="border-color:var(--muted)"></i>resto de activos</span>';
+  el('b100Pick').innerHTML = dl.assets.filter(function (a) { return x.a[a.id] && x.a[a.id].some(isNum); }).map(function (a) {
+    return '<button type="button" data-sel="' + esc(a.id) + '" aria-pressed="' + (a.id === sel ? 'true' : 'false') + '"><i></i>' + esc(a.short) + ' ' + nf(lastOf(x.a[a.id]), 1) + '</button>';
+  }).join('');
+  var notes = [(x.mi ? 'MyInvestor = rentabilidad sin aportaciones (TWR). ' : '') + 'Cada activo, el rendimiento de su precio en euros tal como lo reparte la vista diaria (los fondos, cuando cambia su VL).'];
+  if (x.from && x.from > x.d[0]) notes.push('Los activos empiezan en 100 el ' + dL(x.from) + ', primer día con detalle por posición fiable.');
+  if (x.btc && !isNum(x.btc[0])) { var b0 = null; x.btc.forEach(function (v, i) { if (b0 === null && isNum(v)) b0 = x.d[i]; }); notes.push((dl.btcAsset || 'BTC') + ' empieza en 100 el ' + dL(b0) + ' (primer dato de la pestaña Crypto).'); }
+  el('b100Note').innerHTML = notes.map(function (n) { return '<p>' + esc(n) + '</p>'; }).join('');
+  var cols = (x.mi ? [{ k: 'mi', n: 'MyInvestor', s: x.mi }] : []).concat(x.btc ? [{ k: 'btc', n: dl.btcAsset || 'BTC', s: x.btc }] : []).concat(dl.assets.filter(function (a) { return x.a[a.id]; }).map(function (a) { return { k: a.id, n: a.short, s: x.a[a.id] }; }));
+  el('b100Tbl').innerHTML = '<thead><tr><th class="l">Fecha</th>' + cols.map(function (c) { return '<th>' + esc(c.n) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+    x.d.map(function (d, i) { return '<tr><td class="l">' + dL(d) + '</td>' + cols.map(function (c) { return '<td>' + (isNum(c.s[i]) ? nf(c.s[i], 2) : '–') + '</td>'; }).join('') + '</tr>'; }).reverse().join('') + '</tbody>';
+}
+
+/* ---------- (a) MyInvestor ---------- */
+function renderMi() {
+  var m = D.mi, t = D.total, head = el('miHead');
+  head.innerHTML = '<h2><i style="background:var(--mi)"></i>MyInvestor</h2>' + (m.available ? '<span class="big">' + eur(m.totals.patrimonio) + '</span>' + (isNum(t.pesoMyInvestor) && t.hasCripto ? '<span class="w">' + pct(t.pesoMyInvestor) + ' del patrimonio total</span>' : '') : '');
+  el('miEmpty').hidden = m.available; el('miBody').hidden = !m.available;
+  if (!m.available) { el('miEmpty').innerHTML = emptyBox('Sin datos de MyInvestor', m.reason); return; }
+  var s = m.source, x = m.totals, chips = [];
+  chips.push('<span class="chip"><i class="dot" style="background:var(--' + (s.lastSource === 'broker' ? 'good' : 'warn') + ')"></i>Último dato: ' + esc(s.lastSourceLabel) + ', ' + dS(s.lastDate) + '</span>');
+  if (s.lastBrokerDate && s.lastBrokerDate !== s.lastDate) chips.push('<span class="chip">Último oficial del broker: ' + dS(s.lastBrokerDate) + '</span>');
+  if (s.navTo) chips.push('<span class="chip">Valor liquidativo: ' + (s.navFrom === s.navTo ? dS(s.navTo) : dS(s.navFrom) + ' – ' + dS(s.navTo)) + '</span>');
+  if (isNum(D.meta.miDaysOld) && D.meta.miDaysOld > 4) chips.push('<span class="chip warn">Dato de hace ' + D.meta.miDaysOld + ' días</span>');
+  head.innerHTML += '<div class="chips">' + chips.join('') + '</div>';
+
+  var wk = period('7d'), w = wk && wk.mi, last = m.last;
+  el('miTiles').innerHTML = [
+    tile('Patrimonio MyInvestor', eur(x.patrimonio), last && isNum(last.eur) ? '<b class="' + cls(last.eur) + '">' + eurS(last.eur) + ' (' + pctS(last.pct, 2) + ')</b> desde el ' + dS(last.from) : 'Fondos + acciones + efectivo'),
+    tile('Inversiones', eur(x.inversiones), 'Fondos ' + eur(x.fondos, 0) + ' (' + pct(x.fondosPct) + ')<br>Acciones ' + eur(x.acciones, 0) + ' (' + pct(x.accionesPct) + ')'),
+    tile('Efectivo', eur(x.efectivo), '<b>' + pct(x.cashPct) + '</b> · objetivo ' + pct(m.targets.cash, 0) + (s.cashDate ? '<br>Dato ' + (s.cashSource === 'broker' ? 'del broker, ' : 'del ') + dS(s.cashDate) : '')),
+    tile('Plusvalía latente', '<span class="' + cls(x.plusvalia) + '">' + eurS(x.plusvalia) + '</span>', isNum(x.coste) ? '<b class="' + cls(x.plusvaliaPct) + '">' + pctS(x.plusvaliaPct, 1) + '</b> sobre un coste de ' + eur(x.coste, 0) : 'Sin coste en las posiciones'),
+    tile('Últimos 7 días', w && isNum(w.gain) ? '<span class="' + cls(w.gain) + '">' + eurS(w.gain) + '</span>' : 'n/d', w && isNum(w.twr) ? '<b class="' + cls(w.twr) + '">' + pctS(w.twr, 2) + '</b> sin aportaciones<br>Del ' + dS(w.from) + ' al ' + dS(w.to) + (w.flows ? ' · flujos ' + eurS(w.flows, 0) : '') : 'Sin historial suficiente'),
+    tile('TER medio de los fondos', pct(m.ter.fondos, 2), isNum(m.ter.fondos) ? pct(m.ter.inversiones, 2) + ' sobre inversiones<br>Coste anual ≈ ' + eur(m.ter.costeAnualEur, 0) : 'Hacen falta posiciones y Fondos_Ref')
+  ].join('');
+
+  var notes = (m.notes || []).map(function (n) { return esc(n.replace(/(\d{4}-\d{2}-\d{2})/g, function (k) { return dL(k); })); });
+  el('miNote').innerHTML = notes.length ? '<b>Nota:</b> ' + notes.join(' ') : ''; el('miNote').hidden = !notes.length;
+
+  renderAlloc(); renderPositions(); renderGeo(); renderConc(); renderFlows();
+}
+
+function renderAlloc() {
+  var m = D.mi, a = m.allocation || [], box = el('alloc');
+  el('allocSub').textContent = 'Objetivo ' + ['cash', 'rv', 'rf'].map(function (k) { return nf(m.targets[k] * 100, 0) + NB + '% ' + { cash: 'efectivo', rv: 'renta variable', rf: 'renta fija' }[k]; }).join(' · ') + (m.targets.fromSheet ? '' : ' (por defecto)');
+  if (!a.length) { box.innerHTML = emptyBox('Sin posiciones', 'Hace falta la pestaña «Stocks y Fondos» (o Stocks y Fondos por separado) para calcular la asignación.'); return; }
+  var short = { rv: 'RV', rf: 'RF', cash: 'Efectivo', otros: 'Otros' };
+  function bar(field, klass) {
+    return '<div class="stack ' + klass + '">' + a.filter(function (x) { return isNum(x[field]) && x[field] > 0; }).map(function (x) {
+      var col = cssVar('--' + x.key); if (klass) col = mix(col, cssVar('--surface'), 0.5);
+      return '<span style="flex:' + x[field] + ' 1 0;background:' + col + ';color:' + inkOn(col) + '" title="' + esc(x.label) + ' ' + pct(x[field]) + '"><em style="font-style:normal">' + short[x.key] + ' ' + pct(x[field], Math.abs(x[field] * 100 - Math.round(x[field] * 100)) < 0.05 ? 0 : 1) + '</em></span>';
+    }).join('') + '</div>';
+  }
+  var maxPp = Math.max.apply(null, a.map(function (x) { return Math.abs(x.driftPp || 0); }).concat([10]));
+  var rows = a.map(function (x) {
+    var dp = x.driftPp, st = !isNum(dp) ? null : Math.abs(dp) < 2 ? ['good', 'En objetivo'] : Math.abs(dp) < 5 ? ['warn', 'Algo desviado'] : ['crit', 'Muy desviado'];
+    var w = isNum(dp) ? Math.min(50, Math.abs(dp) / maxPp * 50) : 0;
+    var act = !isNum(x.rebalanceEur) || Math.abs(x.rebalanceEur) < 1 ? '' : x.rebalanceEur > 0 ? (x.key === 'cash' ? 'añadir' : 'comprar') : 'reducir';
+    return '<tr><td class="l"><i class="sw" style="background:var(--' + x.key + ');margin-right:7px"></i>' + esc(x.label) + '<span class="m">' + eur(x.eur, 0) + '</span></td>' +
+      '<td><b>' + pct(x.actual) + '</b><span class="m">objetivo ' + (isNum(x.target) ? pct(x.target, 0) : '–') + '</span></td>' +
+      '<td class="l">' + (isNum(dp) ? '<div class="dv"><div class="dv-t"><i style="' + (dp >= 0 ? 'left:50%' : 'right:50%') + ';width:' + w + '%"></i></div><b>' + sgn(dp, nf(dp, 1)) + NB + 'pp</b></div><span class="st"><i class="dot" style="background:var(--' + st[0] + ')"></i>' + st[1] + '</span>' : '–') + '</td>' +
+      '<td class="h-sm">' + (act ? '<b>' + eur(Math.abs(x.rebalanceEur), 0) + '</b><span class="m">' + act + '</span>' : '–') + '</td></tr>';
+  }).join('');
+  box.innerHTML = '<div class="ab"><span class="lab">Actual</span>' + bar('actual', '') + '<span class="lab">Objetivo</span>' + bar('target', 'tgt') + '</div>' +
+    '<div class="scroll-x"><table class="tbl"><thead><tr><th class="l">Clase</th><th>Peso</th><th class="l">Desvío</th><th class="h-sm">Para volver al objetivo</th></tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    '<div class="foot"><p>Sobre posiciones + efectivo de MyInvestor (la cripto no entra). La clase de cada fondo sale de Fondos_Ref; las acciones cuentan como renta variable. Desvío: menos de 2 pp en objetivo, de 2 a 5 algo desviado, más de 5 muy desviado.</p></div>';
+}
+
+function renderBench() {
+  var b = D.benchmark || {}, P = palette(), name = b.name || 'índice de referencia';
+  el('benchTitle').textContent = 'MyInvestor frente al ' + name;
+  if (!D.mi.available) return;
+  // Serie ya calculada en Code.gs: % acumulado desde el inicio del periodo elegido (y la diferencia en puntos)
+  var rows = ((D.perf.bench || {})[state.range]) || [];
+  if (rows.length < 2) { chartMsg('chBench', 'Hacen falta al menos dos días de Historico para ver la rentabilidad acumulada.'); el('benchLegend').innerHTML = ''; el('benchData').innerHTML = ''; }
+  else {
+    var b0 = rows[0], ser = function (k) { return rows.map(function (r) { return r[k]; }); };
+    var mi = ser('mi'), be = b.available ? ser('bench') : null, sets = [];
+    if (be) sets.push(lineSet(name, be, P.bench, { k: 'bench' }));
+    sets.push(lineSet('MyInvestor', mi, P.mi, { k: 'mi' }));
+    var opts = baseOpts(rows, function (v) { return sgn(v, nf(v, Math.abs(v) < 10 ? 1 : 0)) + NB + '%'; }, {
+      label: function (c) { return ' ' + sgn(c.parsed.y, nf(c.parsed.y, 2)) + NB + '%  ' + c.dataset.label; },
+      footer: function (items) { var r = rows[items[0].dataIndex]; return be && isNum(r.diff) ? 'Diferencia: ' + sgn(r.diff, nf(r.diff, 2)) + ' pp' : ''; }
+    });
+    opts.scales.y.grid.color = function (c) { return c.tick && c.tick.value === 0 ? P.axis : P.grid; };
+    opts.plugins.tooltip.itemSort = function (x, y) { return y.datasetIndex - x.datasetIndex; };
+    draw('chBench', { type: 'line', data: { labels: rows.map(function (r) { return dS(r.d); }), datasets: sets }, options: opts });
+    var n = rows.length - 1;
+    el('benchLegend').innerHTML = '<span><i class="sw line" style="border-color:var(--mi)"></i>MyInvestor <b>' + sgn(mi[n], nf(mi[n], 2)) + NB + '%</b></span>' +
+      (be ? '<span><i class="sw line" style="border-color:var(--bench)"></i>' + esc(name) + ' <b>' + sgn(be[n], nf(be[n], 2)) + NB + '%</b></span>' : '') + '<span class="m">desde el ' + dS(b0.d) + '</span>';
+    el('benchData').innerHTML = '<thead><tr><th class="l">Fecha</th><th>MyInvestor</th>' + (be ? '<th>' + esc(name) + '</th><th>Diferencia</th>' : '') + '</tr></thead><tbody>' +
+      rows.map(function (r, i) { return '<tr><td class="l">' + dL(r.d) + '</td><td>' + sgn(mi[i], nf(mi[i], 2)) + NB + '%</td>' + (be ? '<td>' + (isNum(be[i]) ? sgn(be[i], nf(be[i], 2)) + NB + '%' : '–') + '</td><td>' + (isNum(r.diff) ? sgn(r.diff, nf(r.diff, 2)) + NB + 'pp' : '–') + '</td>' : '') + '</tr>'; }).reverse().join('') + '</tbody>';
+  }
+  var keys = ['1m', 'ytd', 'inicio'], body = keys.map(function (k) {
+    var p = period(k); if (!p || !p.mi || !isNum(p.mi.twr)) return '';
+    var x = p.mi, y = b.available ? p.bench : null, df = b.available && isNum(p.benchDiff) ? p.benchDiff * 100 : null;
+    return '<tr><td class="l">' + p.label + (x.partial ? AST : '') + '<span class="m">desde ' + dS(x.from) + '</span></td><td><b class="' + cls(x.twr) + '">' + pctS(x.twr, 2) + '</b></td>' +
+      '<td>' + (y && isNum(y.twr) ? pctS(y.twr, 2) : 'n/d') + '</td><td>' + (isNum(df) ? '<b class="' + cls(df) + '">' + sgn(df, nf(df, 2)) + NB + 'pp</b>' : '<span class="na" title="Las fechas de las dos series no coinciden">n/d</span>') + '</td></tr>';
+  }).join('');
+  el('benchTbl').innerHTML = body ? '<thead><tr><th class="l">Periodo</th><th>MyInvestor</th><th>' + esc(name) + '</th><th>Diferencia</th></tr></thead><tbody>' + body + '</tbody>' : '';
+  var dd = D.mi.drawdown, note = [];
+  note.push(b.available ? 'El ' + esc(name) + ' se aproxima con el valor liquidativo de ' + esc(b.proxyName || b.proxyId) + ' (' + esc(b.proxyId) + '), que ya descuenta su TER' + (isNum(b.ter) ? ' del ' + pct(b.ter, 2) : '') + '. No se consulta ningún dato fuera de la hoja.' : 'Sin referencia: ' + esc(b.reason || 'no hay serie del índice en la hoja.'));
+  if (dd && isNum(dd.max)) note.push('Mayor caída desde máximos: <b>' + pct(dd.max, 2) + '</b>' + (dd.peakDate ? ' (del ' + dS(dd.peakDate) + ' al ' + dS(dd.troughDate) + ')' : '') + ' · ahora ' + (dd.current < -0.00005 ? 'a ' + pct(dd.current, 2) + ' del máximo del ' + dS(dd.lastPeakDate) : 'en máximos') + '.');
+  el('benchNote').innerHTML = note.map(function (n) { return '<p>' + n + '</p>'; }).join('');
+}
+
+function renderPositions() {
+  var m = D.mi, t = el('posTbl'), ps = (m.positions || []).slice();
+  if (!ps.length) { el('posSub').textContent = ''; t.innerHTML = '<tbody><tr><td class="l" style="white-space:normal">' + emptyBox('Sin posiciones', 'No hay filas en «Stocks y Fondos» ni en Stocks / Fondos.') + '</td></tr></tbody>'; return; }
+  var k = state.sort.k, dir = state.sort.dir;
+  ps.sort(function (a, b) {
+    var x = a[k], y = b[k];
+    if (typeof x === 'string' || typeof y === 'string') return dir * String(x || '').localeCompare(String(y || ''), 'es');
+    if (!isNum(x)) return 1; if (!isNum(y)) return -1;
+    return dir * (x - y);
+  });
+  var maxW = Math.max.apply(null, ps.map(function (p) { return p.pesoInv || 0; }).concat([0.01]));
+  function th(key, label, klass) { return '<th class="sort ' + (klass || '') + (k === key ? ' on' + (dir > 0 ? ' asc' : '') : '') + '" data-k="' + key + '">' + label + '</th>'; }
+  var rows = ps.map(function (p) {
+    var pr = isNum(p.precio) ? nf(p.precio, p.precio < 10 ? 4 : p.precio < 100 ? 3 : 2) : 'n/d';
+    return '<tr><td class="l"><div class="name" title="' + esc(p.nombre) + '">' + esc(p.nombre) + '</div><span class="m">' + esc(p.id) + '<span class="h-sm"> · cuenta ' + esc(p.cuenta || 'n/d') + ' · ' + (p.kind === 'fondo' ? 'fondo' : 'acción') + '</span></span>' +
+      '<span class="m only-sm">' + esc(p.clase) + ' · cuenta ' + esc(p.cuenta || 'n/d') + '</span>' +
+      '<span class="m only-sm">7 días ' + pctS(p.semanaPct, 2) + (p.kind === 'fondo' && isNum(p.ter) ? ' · TER ' + pct(p.ter, 2) : '') + '</span></td>' +
+      '<td class="l h-sm"><span class="pill">' + esc(p.clase) + '</span></td>' +
+      '<td><b>' + eur(p.valor) + '</b><span class="m only-sm">' + pct(p.pesoInv) + '</span></td>' +
+      '<td class="l h-sm" style="min-width:128px">' + pct(p.pesoInv) + '<i class="wbar" style="width:' + Math.max(2, Math.round((p.pesoInv || 0) / maxW * 64)) + 'px"></i></td>' +
+      '<td class="h-sm ' + cls(p.semanaPct) + '">' + pctS(p.semanaPct, 2) + '<span class="m">' + eurS(p.semanaEur) + '</span></td>' +
+      '<td class="' + cls(p.plusvalia) + '">' + eurS(p.plusvalia) + '<span class="m">' + pctS(p.plusPct, 1) + '</span></td>' +
+      '<td class="h-sm">' + eur(p.coste) + '</td>' +
+      '<td class="h-sm">' + (isNum(p.cantidad) ? nf(p.cantidad, p.cantidad % 1 ? 3 : 0) : 'n/d') + '</td>' +
+      '<td class="h-sm">' + pr + (p.navDate ? '<span class="m">VL del ' + dS(p.navDate) + '</span>' : '') + '</td>' +
+      '<td class="h-sm">' + (p.kind === 'stock' ? '–' : pct(p.ter, 2)) + '</td></tr>';
+  }).join('');
+  var x = m.totals, inv = x.invPos;
+  t.innerHTML = '<thead><tr>' + th('nombre', 'Posición', 'l') + th('clase', 'Clase', 'l h-sm') + th('valor', 'Valor') + th('pesoInv', 'Peso', 'l h-sm') + th('semanaPct', '7 días', 'h-sm') + th('plusvalia', 'Plusvalía') + th('coste', 'Coste', 'h-sm') + th('cantidad', 'Cantidad', 'h-sm') + th('precio', 'Precio / VL', 'h-sm') + th('ter', 'TER', 'h-sm') + '</tr></thead><tbody>' + rows + '</tbody>' +
+    '<tfoot><tr><td class="l">Total inversiones</td><td class="h-sm"></td><td>' + eur(inv) + '</td><td class="l h-sm">100' + NB + '%</td><td class="h-sm"></td><td class="' + cls(x.plusvalia) + '">' + eurS(x.plusvalia) + '<span class="m">' + pctS(x.plusvaliaPct, 1) + '</span></td><td class="h-sm">' + eur(x.coste) + '</td><td class="h-sm"></td><td class="h-sm"></td><td class="h-sm">' + pct(m.ter.fondos, 2) + '</td></tr></tfoot>';
+  el('posSub').textContent = ps.length + ' posiciones a ' + dL(m.posDate) + (m.weekPositionsFrom ? ' · variación de 7 días frente al ' + dS(m.weekPositionsFrom) : '') + ' · pulsa una cabecera para ordenar';
+}
+
+function renderGeo() {
+  var g = D.mi.geo || [], box = el('geo');
+  if (!g.length) { box.innerHTML = emptyBox('Sin datos', 'Hacen falta posiciones y las columnas Geo_* de Fondos_Ref.'); return; }
+  var mx = Math.max.apply(null, g.map(function (x) { return x.pct; }));
+  box.innerHTML = '<div class="hb">' + g.map(function (x) {
+    return '<span>' + esc(x.label) + '</span><span class="t"><i style="width:' + (mx ? x.pct / mx * 100 : 0) + '%"></i></span><span class="n"><b>' + pct(x.pct) + '</b><span class="m">' + eur(x.eur, 0) + '</span></span>';
+  }).join('') + '</div><div class="foot">Fondos repartidos según las columnas Geo_* de Fondos_Ref; acciones por país de la empresa.' + (D.mi.geoMissingEur > 0.5 ? ' Sin dato geográfico: ' + eur(D.mi.geoMissingEur, 0) + ' (en «Otros»).' : '') + '</div>';
+}
+
+function renderConc() {
+  var c = D.mi.concentration, box = el('conc');
+  if (!c || !c.nPosiciones) { box.innerHTML = emptyBox('Sin posiciones', 'Aparecerá cuando haya posiciones.'); return; }
+  var mx = c.top5.length ? c.top5[0].pesoInv || 0.01 : 0.01;
+  box.innerHTML = '<div class="stats s4">' +
+    stat('Posiciones', c.nPosiciones, c.nFondos + ' fondos · ' + c.nAcciones + ' acciones') +
+    stat('Peso del top 5', pct(c.top5Peso), 'de las inversiones') +
+    stat('Mayor instrumento', c.mayorInstrumento ? pct(c.mayorInstrumento.pesoInv) : 'n/d', c.mayorInstrumento ? esc(String(c.mayorInstrumento.nombre).substring(0, 26)) : '') +
+    stat('Nº equivalente', isNum(c.nEfectivo) ? nf(c.nEfectivo, 1) : 'n/d', '1 / HHI · ' + c.nInstrumentos + ' instrumentos') + '</div>' +
+    '<div class="top5">' + c.top5.map(function (p) {
+      return '<span class="nm" title="' + esc(p.nombre) + ' · cuenta ' + esc(p.cuenta) + '">' + p.rank + '. ' + esc(p.nombre) + '</span><span class="n"><b>' + pct(p.pesoInv) + '</b> <span class="m" style="display:inline">' + eur(p.valor, 0) + '</span></span><span class="t"><i style="width:' + (p.pesoInv / mx * 100) + '%"></i></span>';
+    }).join('') + '</div>';
+}
+
+function renderFlows() {
+  var f = D.mi.flows, box = el('flows'), y = D.meta.asOf ? D.meta.asOf.substring(0, 4) : '';
+  el('flowsSub').textContent = f.flujosFound ? 'Pestaña Flujos' : (f.known ? 'Columna de aportaciones de Historico' : 'Sin pestaña Flujos');
+  var html = '<div class="stats s4">' + stat('Aportación neta', eurS(f.total, 0), 'todo el historial') + stat('En ' + y, eurS(f.anio, 0), 'neto del año') +
+    stat('Este mes', eurS(f.mes, 0), D.meta.asOf ? MESES[+D.meta.asOf.substring(5, 7) - 1] + ' ' + y : '') + stat('Movimientos', f.n, eur(f.aportaciones, 0) + ' aportado · ' + eur(Math.abs(f.retiradas), 0) + ' retirado') + '</div>';
+  if (f.items.length) html += '<div class="scroll-y"><table class="tbl"><thead><tr><th class="l">Fecha</th><th class="l">Tipo</th><th>Importe</th></tr></thead><tbody>' +
+    f.items.map(function (x) { return '<tr title="' + esc(x.nota) + '"><td class="l">' + dL(x.date) + '</td><td class="l">' + esc(x.tipo) + (x.origen === 'Historico' ? '<span class="m">de Historico</span>' : '') + '</td><td class="' + cls(x.importe) + '"><b>' + eurS(x.importe) + '</b></td></tr>'; }).join('') + '</tbody></table></div>';
+  else html += emptyBox(f.known ? 'Sin aportaciones ni retiradas' : 'No hay registro de flujos', f.known ? 'No hay movimientos de dinero registrados (las filas de tipo «nota» no cuentan). Toda la variación del patrimonio es de mercado.' : 'Falta la pestaña Flujos y Historico no tiene columna de aportaciones: la rentabilidad se calcula como si no hubiera habido aportaciones.');
+  box.innerHTML = html;
+}
+
+/* ---------- (b) Cripto ---------- */
+function renderCrypto() {
+  var c = D.crypto, t = D.total, head = el('crHead');
+  head.innerHTML = '<h2><i style="background:var(--cr)"></i>Cripto</h2>' + (c.available ? '<span class="big">' + eur(c.valor) + '</span><span class="w">' + pct(c.pesoTotal) + ' del patrimonio total</span>' : '');
+  el('crEmpty').hidden = c.available; el('crBody').hidden = !c.available;
+  if (!c.available) {
+    chartMsg('chCr', '');
+    el('crEmpty').innerHTML = emptyBox('Sin datos de cripto', (c.reason || 'No se ha podido leer la pestaña Crypto.') + (t.hasMyInvestor ? ' El patrimonio total incluye solo MyInvestor.' : '')) + (c.movs && c.movs.available ? '<div class="foot">Crypto_Movs sí tiene ' + c.movs.nMovs + ' movimientos (coste ' + eur(c.movs.coste) + '), pero falta la valoración diaria de la pestaña Crypto.</div>' : '');
+    return;
+  }
+  var chips = ['<span class="chip"><i class="dot" style="background:var(--' + (c.source === 'broker' ? 'good' : 'warn') + ')"></i>' + (c.source === 'broker' ? 'Dato de la plataforma' : 'Precio de mercado') + ', ' + dS(c.asOf) + (hhmm(c.priceTime) ? ' ' + hhmm(c.priceTime) : '') + '</span>'];
+  if (c.plataforma) chips.push('<span class="chip">' + esc(c.activo) + ' en ' + esc(c.plataforma) + '</span>');
+  if (isNum(D.meta.crDaysOld) && D.meta.crDaysOld > 2) chips.push('<span class="chip warn">Dato de hace ' + D.meta.crDaysOld + ' días</span>');
+  head.innerHTML += '<div class="chips">' + chips.join('') + '</div>';
+
+  var last = c.last, w7 = c.precioCambio && c.precioCambio.d7, origen = { hoja: 'pestaña Crypto', movs: 'suma de Crypto_Movs', fijo: 'valor fijo de Code.gs' }[c.costeOrigen] || 'n/d';
+  var medio = c.movs.available && isNum(c.movs.precioMedio) ? c.movs.precioMedio : (c.conCoste && isNum(c.conCoste.precioMedio) ? c.conCoste.precioMedio : null);
+  var over = c.sinCoste && c.sinCoste.btc > 0;
+  el('crTiles').innerHTML = [
+    tile('Valor', eur(c.valor), last && isNum(last.eur) ? '<b class="' + cls(last.eur) + '">' + eurS(last.eur) + ' (' + pctS(last.pct, 2) + ')</b> desde el ' + dS(last.from) : 'Primer registro: aún sin variación'),
+    tile('Cantidad', btc(c.cantidad) + '<small>' + esc(c.activo) + '</small>', c.plataforma ? 'En ' + esc(c.plataforma) : 'Plataforma n/d'),
+    tile('Precio de ' + esc(c.activo), eur(c.precio), (w7 && isNum(w7.pct) ? '<b class="' + cls(w7.pct) + '">' + pctS(w7.pct, 2) + '</b> en 7 días<br>' : '') + (c.priceTime ? 'A las ' + esc(hhmm(c.priceTime) || c.priceTime) + ' del ' + dS(c.asOf) : 'Cierre del ' + dS(c.asOf))),
+    tile('Coste', eur(c.coste), (isNum(medio) ? 'Precio medio ' + eur(medio, 0) + '<br>' : '') + 'Fuente: ' + origen),
+    tile('Plusvalía latente', '<span class="' + cls(c.plusvalia) + '">' + eurS(c.plusvalia) + '</span>', isNum(c.plusvaliaPct) ? '<b class="' + cls(c.plusvaliaPct) + '">' + pctS(c.plusvaliaPct, 2) + '</b> sobre el coste' + (over ? '<br>Sobreestimada: ver nota' : '') : 'Sin coste registrado'),
+    tile('Peso sobre el total', pct(c.pesoTotal, 1), 'De un patrimonio de ' + eur(t.patrimonio, 0))
+  ].join('');
+
+  var note = '';
+  if (over) {
+    var sc = c.sinCoste, cc = c.conCoste;
+    note = '<b>Nota:</b> la plusvalía está sobreestimada porque ' + (sc.origen === 'fijo' ? '~' : '≈ ') + nf(sc.btc, sc.origen === 'fijo' ? 3 : 4) + ' ' + esc(c.activo) + (isNum(sc.eur) ? ' (unos ' + eur(sc.eur, 0) + ')' : '') + ' del saldo no tienen coste registrado' + (sc.origen === 'movs' ? ' en Crypto_Movs' : '') + '.' +
+      (cc && isNum(cc.plusvalia) ? ' Contando solo los ' + nf(cc.btc, 4) + ' ' + esc(c.activo) + ' con coste, el resultado sería ' + eurS(cc.plusvalia) + ' (' + pctS(cc.plusvaliaPct, 1) + ').' : '');
+  }
+  if (isNum(c.costeMovsDiff)) note += (note ? ' ' : '') + 'El coste de la pestaña Crypto no coincide con la suma de Crypto_Movs (' + eur(c.costeMovsDiff) + ').';
+  if (c.costeOrigen === 'fijo') note += (note ? ' ' : '') + 'El coste es el valor fijo guardado en Code.gs porque la hoja no lo trae: actualízalo si compras o vendes.';
+  el('crNote').innerHTML = note; el('crNote').hidden = !note;
+
+  renderCrChart(); renderMovs();
+}
+
+function renderCrChart() {
+  var c = D.crypto, P = palette(), rows = inRange(c.series || []);
+  if (rows.length < 2) {
+    chartMsg('chCr', rows.length ? 'Solo hay un registro (' + dL(rows[0].d) + '). El gráfico de valor frente a coste aparecerá cuando haya al menos dos días de datos.' : 'Sin valoraciones en el periodo elegido.');
+    el('crLegend').innerHTML = ''; el('crData').innerHTML = ''; el('chCr').parentNode.style.height = '150px'; return;
+  }
+  el('chCr').parentNode.style.height = '';
+  var hasCost = rows.some(function (r) { return isNum(r.coste); });
+  var sets = [lineSet('Valor', rows.map(function (r) { return r.valor; }), P.cr, hasCost ? { fill: { target: 1, above: rgba(P.good, 0.14), below: rgba(P.crit, 0.14) } } : {})];
+  if (hasCost) sets.push(lineSet('Coste', rows.map(function (r) { return r.coste; }), P.bench, { stepped: 'before', borderDash: [5, 4], pointRadius: 0, pointHoverRadius: 0 }));
+  var opts = baseOpts(rows, axisEur, {
+    label: function (x) { return ' ' + eur(x.parsed.y) + '  ' + x.dataset.label; },
+    footer: function (items) {
+      var r = rows[items[0].dataIndex], f = [];
+      if (isNum(r.plus)) f.push('Plusvalía: ' + eurS(r.plus));
+      if (isNum(r.precio)) f.push('Precio: ' + eur(r.precio, 0) + (isNum(r.cantidad) ? ' · ' + btc(r.cantidad) + ' ' + c.activo : ''));
+      return f;
+    }
+  });
+  opts.scales.y.grace = '12%';
+  draw('chCr', { type: 'line', data: { labels: rows.map(function (r) { return dS(r.d); }), datasets: sets }, options: opts });
+  var lr = rows[rows.length - 1];
+  el('crLegend').innerHTML = '<span><i class="sw line" style="border-color:var(--cr)"></i>Valor <b>' + eur(lr.valor, 0) + '</b></span>' + (hasCost ? '<span><i class="sw dash" style="border-color:var(--bench)"></i>Coste <b>' + eur(lr.coste, 0) + '</b></span>' : '') +
+'';
+  el('crData').innerHTML = '<thead><tr><th class="l">Fecha</th><th>Precio</th><th>Cantidad</th><th>Valor</th><th>Coste</th></tr></thead><tbody>' +
+    rows.slice().reverse().slice(0, 400).map(function (r) { return '<tr><td class="l">' + dL(r.d) + '</td><td>' + eur(r.precio, 0) + '</td><td>' + btc(r.cantidad) + '</td><td><b>' + eur(r.valor) + '</b></td><td>' + eur(r.coste) + '</td></tr>'; }).join('') + '</tbody>';
+}
+
+function renderMovs() {
+  var c = D.crypto, mv = c.movs, box = el('crMovs');
+  if (!mv.available) { el('crMovsSub').textContent = 'Pestaña Crypto_Movs'; box.innerHTML = emptyBox('Sin detalle de compras', (mv.reason || 'No hay movimientos.') + ' El coste mostrado sale de ' + ({ hoja: 'la pestaña Crypto', fijo: 'un valor fijo de Code.gs' }[c.costeOrigen] || 'otra fuente') + '.'); return; }
+  el('crMovsSub').textContent = 'Pestaña Crypto_Movs · ' + mv.nMovs + ' movimientos del ' + dL(mv.first) + ' al ' + dL(mv.last);
+  var feeEur = mv.comisionEur;
+  box.innerHTML = '<div class="stats">' +
+    stat('Invertido en compras', eur(mv.eurComprado), mv.nCompras + ' compras' + (mv.nVentas ? ' · ' + mv.nVentas + ' ventas' : '')) +
+    stat('Precio medio de compra', eur(mv.precioMedio, 0), isNum(mv.precioVsMedio) ? 'precio actual ' + pctS(mv.precioVsMedio, 1) : '') +
+    stat(esc(c.activo) + ' con coste', nf(mv.btcConCoste, 8), 'de ' + btc(c.cantidad) + ' en cartera') +
+    stat('Comisiones', nf(mv.comisionBtc, 8) + ' ' + esc(c.activo), isNum(feeEur) ? '≈ ' + eur(feeEur) + ' al precio actual' : '') + '</div>' +
+    '<div class="scroll-y"><table class="tbl"><thead><tr><th class="l">Fecha</th><th>' + esc(c.activo) + '</th><th>Precio</th><th>Total</th></tr></thead><tbody>' +
+    mv.items.map(function (m) { return '<tr><td class="l">' + dL(m.date) + (m.tipo !== 'compra' ? '<span class="m">' + esc(m.tipo) + '</span>' : '') + '</td><td>' + sgn(m.neto, nf(m.neto, 8)) + '</td><td>' + eur(m.precio, 0) + '</td><td><b>' + eur(m.total) + '</b></td></tr>'; }).join('') + '</tbody></table></div>' +
+    (mv.nMovs > mv.items.length ? '<div class="foot">Se muestran los ' + mv.items.length + ' movimientos más recientes.</div>' : '');
+}
+
+/* ---------- Pie ---------- */
+function renderFooter() {
+  var st = D.status || [], icon = { ok: '✓', info: '–', warn: '⚠' };
+  var rows = st.map(function (s) {
+    return '<tr><td class="l">' + icon[s.level || 'ok'] + ' ' + esc(s.tab) + '</td><td>' + (s.found ? s.rows : '–') + '</td><td class="l">' + (s.from ? dL(s.from) + ' → ' + dL(s.to) : '') + '</td><td class="l">' + esc(s.msg || (s.found ? 'Leída correctamente' : '')) + '</td></tr>';
+  }).join('');
+  var nOk = st.filter(function (s) { return s.found && s.level !== 'warn'; }).length, nWarn = st.filter(function (s) { return s.level === 'warn'; }).length, nNo = st.filter(function (s) { return !s.found && s.level !== 'warn'; }).length;
+  el('footer').innerHTML = '<details><summary>Estado de los datos: ' + nOk + ' pestañas leídas' + (nNo ? ', ' + nNo + ' que no existen' : '') + (nWarn ? ', ' + nWarn + ' con problemas' : '') + '</summary>' +
+    '<div class="scroll-x"><table class="tbl"><thead><tr><th class="l">Pestaña</th><th>Filas útiles</th><th class="l">Fechas</th><th class="l">Observaciones</th></tr></thead><tbody>' + rows + '</tbody></table></div></details>' +
+    'El dashboard solo lee la hoja; nunca escribe en ella. Calculado el ' + esc(new Date(D.meta.generatedAt).toLocaleString('es-ES')) + ' · se actualiza solo cada 5 minutos' +
+    (D.spreadsheetUrl ? ' · <a href="' + esc(D.spreadsheetUrl) + '" target="_blank" rel="noopener">abrir la hoja</a>' : '') + '.';
+}
+
+/** Las etiquetas dentro de las barras apiladas solo se dejan si caben enteras. */
+function fitLabels() {
+  Array.prototype.forEach.call(document.querySelectorAll('.ab .stack > span'), function (s) {
+    var em = s.firstChild; if (!em || !em.style) return;
+    em.style.display = '';
+    if (em.offsetWidth + 10 > s.clientWidth) em.style.display = 'none';
+  });
+}
+
+/* ===================== Eventos ===================== */
+function applyTheme(t) { document.documentElement.setAttribute('data-theme', t); }
+function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'light'; }
+function redrawCharts() { if (!D) return; [renderEvo, renderBench, renderAlloc, function () { if (D.crypto.available) renderCrChart(); }, function () { if (D.daily && D.daily.available) renderDayAll(); }].forEach(function (fn) { try { fn(); } catch (e) { if (window.console) console.error(e); } }); fitLabels(); }
+
+var mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+var forced = HASH.theme === 'dark' || HASH.theme === 'light' ? HASH.theme : recall('theme');
+applyTheme(forced || (mq && mq.matches ? 'dark' : 'light'));
+if (mq && mq.addEventListener) mq.addEventListener('change', function (e) { if (!recall('theme')) { applyTheme(e.matches ? 'dark' : 'light'); redrawCharts(); } });
+
+el('themeBtn').addEventListener('click', function () { var t = currentTheme() === 'dark' ? 'light' : 'dark'; applyTheme(t); remember('theme', t); redrawCharts(); });
+el('refresh').addEventListener('click', loadData);
+el('banner').addEventListener('click', function (e) { if (e.target && e.target.getAttribute && e.target.getAttribute('data-retry')) loadData(); });
+el('rangeSeg').addEventListener('click', function (e) {
+  var b = e.target.closest ? e.target.closest('button') : null; if (!b || !D) return;
+  state.range = b.getAttribute('data-v'); remember('range', state.range);
+  renderFilters(); redrawCharts();
+});
+el('scaleSeg').addEventListener('click', function (e) {
+  var b = e.target.closest ? e.target.closest('button') : null; if (!b || !D) return;
+  state.scale = b.getAttribute('data-v'); remember('scale', state.scale); renderEvo();
+});
+el('dwinSeg').addEventListener('click', function (e) {
+  var b = e.target.closest ? e.target.closest('button') : null; if (!b || !D || !D.daily || !D.daily.available) return;
+  state.dwin = b.getAttribute('data-v'); remember('dwin', state.dwin); renderDayAll();
+});
+el('dunitSeg').addEventListener('click', function (e) {
+  var b = e.target.closest ? e.target.closest('button') : null; if (!b || !D || !D.daily || !D.daily.available) return;
+  state.dunit = b.getAttribute('data-v'); remember('dunit', state.dunit); renderDayFilters(); renderDayChart();
+});
+// Elegir un activo (en los drivers o bajo la base 100) lo destaca en la contribución acumulada y en la base 100
+['drv', 'b100Pick'].forEach(function (id) {
+  el(id).addEventListener('click', function (e) {
+    var b = e.target.closest ? e.target.closest('[data-sel]') : null; if (!b || !D) return;
+    state.dsel = b.getAttribute('data-sel'); renderDrivers(); renderB100();
+  });
+});
+el('posTbl').addEventListener('click', function (e) {
+  var th = e.target.closest ? e.target.closest('th.sort') : null; if (!th || !D) return;
+  var k = th.getAttribute('data-k');
+  state.sort = { k: k, dir: state.sort.k === k ? -state.sort.dir : (k === 'nombre' || k === 'clase' ? 1 : -1) };
+  renderPositions();
+});
+Array.prototype.forEach.call(document.querySelectorAll('.nav button'), function (b) {
+  b.addEventListener('click', function () { var s = el(b.getAttribute('data-go')); if (s && s.scrollIntoView) s.scrollIntoView({ behavior: 'smooth', block: 'start' }); });
+});
+if (window.ResizeObserver) new ResizeObserver(function () { fitLabels(); }).observe(el('alloc'));
+else window.addEventListener('resize', fitLabels);
+document.addEventListener('visibilitychange', function () { if (!document.hidden && lastLoad && Date.now() - lastLoad > 2 * 60 * 1000) loadData(); });
+
+loadData();
+setInterval(function () { if (!document.hidden) loadData(); }, REFRESH_MS);
+})();
+</script>
+</body>
+</html>
